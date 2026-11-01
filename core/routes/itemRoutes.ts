@@ -199,6 +199,10 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         // this same search endpoint, so Wishlist and Add Record behave identically.
         const selectedMasterId = plugin.id === 'music' && typeof req.body.master_id === 'string'
           && /^[1-9][0-9]{0,11}$/.test(req.body.master_id) ? req.body.master_id : undefined;
+        const selectedMasterIds = selectedMasterId
+          ? Array.from(new Set([selectedMasterId, ...String(req.body.master_ids || '').split(',')
+              .filter((id: string) => /^[1-9][0-9]{0,11}$/.test(id))])).slice(0, 12)
+          : [];
         if (selectedMasterId) {
           res.locals.selectedMaster = {
             id: selectedMasterId,
@@ -206,18 +210,24 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           };
         }
 
-        const runSearch = (q: string) => source.search(q, {
-          ...searchFields,
-          master_id: selectedMasterId,
-          type: type || plugin.id,
-          year,
-          country,
-          genre_filter,
-          label_filter,
-          language: req.language,
-          // Pass the plugin's own settings so the provider stays the only one that knows its option keys
-          pluginSettings: settings?.pluginSettings?.[plugin.id] || {}
-        });
+        const runSearch = async (q: string) => {
+          const options = {
+            ...searchFields,
+            type: type || plugin.id,
+            year,
+            country,
+            genre_filter,
+            label_filter,
+            language: req.language,
+            pluginSettings: settings?.pluginSettings?.[plugin.id] || {}
+          };
+          if (!selectedMasterId || source.id !== 'discogs') return source.search(q, options);
+          const sets = await Promise.all(selectedMasterIds.map(id =>
+            source.search(q, { ...options, master_id: id })));
+          const unique = new Map<string, any>();
+          for (const result of sets.flat()) unique.set(String(result.id), result);
+          return Array.from(unique.values());
+        };
 
         let results;
         if (guess) {
@@ -241,10 +251,12 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             ? searchFields.country : 'US';
           let actualCountry = preferredCountry;
           if (!candidates.length && preferredCountry) {
-            candidates = await source.search(searchQuery, {
-              ...searchFields, master_id: selectedMasterId,
-              country: '', type: type || plugin.id
-            });
+            const sets = await Promise.all(selectedMasterIds.map(id =>
+              source.search(searchQuery, {
+                ...searchFields, master_id: id,
+                country: '', type: type || plugin.id
+              })));
+            candidates = [...new Map(sets.flat().map(result => [String(result.id), result])).values()];
             actualCountry = '';
           }
           if (candidates.length > 0) {
@@ -253,6 +265,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
               type: type || 'vinyl',
               source: 'discogs',
               master_id: selectedMasterId,
+              master_ids: selectedMasterIds.join(','),
               country: actualCountry,
               choose_pressing: '1'
             });
@@ -395,11 +408,21 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           ? req.query.master_id : undefined;
         let availablePressings: ReturnType<typeof pressingOptions> = [];
         let pressingCountry = typeof req.query.country === 'string' ? req.query.country : 'US';
+        const masterIds = masterId
+          ? Array.from(new Set([masterId, ...String(req.query.master_ids || '').split(',')
+              .filter(id => /^[1-9][0-9]{0,11}$/.test(id))])).slice(0, 12)
+          : [];
         if (masterId) {
-          const common = { master_id: masterId, type: searchTypeHint || 'vinyl', browse_mode: 'pressings' };
-          let matched = await source.search('', { ...common, country: pressingCountry });
+          const fetchPressings = async (requestedCountry: string) => {
+            const responses = await Promise.all(masterIds.map(id => source.search('', {
+              master_id: id, type: searchTypeHint || 'vinyl',
+              browse_mode: 'pressings', country: requestedCountry
+            })));
+            return responses.flat();
+          };
+          let matched = await fetchPressings(pressingCountry);
           if (!matched.length && pressingCountry) {
-            matched = await source.search('', { ...common, country: '' });
+            matched = await fetchPressings('');
             pressingCountry = '';
           }
           availablePressings = pressingOptions(matched);
@@ -415,6 +438,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         }
         res.locals.availablePressings = availablePressings;
         res.locals.pressingMasterId = masterId;
+        res.locals.pressingMasterIds = masterIds.join(',');
         res.locals.pressingCountry = pressingCountry;
         res.locals.pressingSelectionPending = !!masterId && req.query.choose_pressing === '1';
         // The first release supplies a preview while an edition is not yet

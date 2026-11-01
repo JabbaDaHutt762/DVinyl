@@ -1,3 +1,5 @@
+import ejs from 'ejs';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validDiscogsMasterId, prioritizeMatchingMasters, exactArtistMasters, groupAlbumMasters } from '../plugins/music/discogsBrowse';
@@ -175,4 +177,15 @@ test('artist query falls back to album title lookup if no matching artist exists
     assert.equal(requested[1]?.searchParams.get('q'), 'Morrison Hotel');
     assert.equal(results[0]?.title, 'Morrison Hotel');
   } finally { globalThis.fetch = oldFetch; }
+});
+
+
+test('album and configure templates compile (search/pressing routing smoke test)', () => {
+  for (const filename of [
+    'core/views/add.ejs',
+    'core/views/confirm.ejs',
+    'plugins/music/partials/search-form.ejs'
+  ]) {
+    assert.doesNotThrow(() => ejs.compile(readFileSync(filename, 'utf8'), { filename }), filename);
+  }
 });

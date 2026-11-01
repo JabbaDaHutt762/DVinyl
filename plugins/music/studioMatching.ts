@@ -16,7 +16,7 @@ export function masterLinks(relations: any[]): string[] {
   }
   return result;
 }
-export function matchingMasters(results: any[], artist: string, album: string): string[] {
+export function matchingMasters(results: any[], artist: string, album: string, fromReleases = false): string[] {
   const result: string[] = [];
   for (const item of results || []) {
     const title = String(item.title || '');
@@ -24,7 +24,7 @@ export function matchingMasters(results: any[], artist: string, album: string): 
     const itemArtist = sep < 0 ? String(item.artist || '') : title.slice(0, sep);
     const itemAlbum = sep < 0 ? title : title.slice(sep + 3);
     if (artistKey(itemArtist) !== artistKey(artist) || albumKey(itemAlbum) !== albumKey(album)) continue;
-    const id = String(item.master_id || item.id || '');
+    const id = String(fromReleases ? (item.master_id || '') : (item.id || ''));
     if (/^[1-9][0-9]{0,11}$/.test(id) && !result.includes(id)) result.push(id);
   }
   return result;

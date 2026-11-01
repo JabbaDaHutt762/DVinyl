@@ -3,6 +3,19 @@
 This is a community-maintained fork of [Kyonew/DVinyl](https://github.com/Kyonew/DVinyl).
 Version numbers use the `-clemons.N` suffix to distinguish our work from official releases.
 
+## 3.3.0-clemons.4 — November 1, 2026
+
+**Unfiltered barcode scanning and optional pressing selection.**
+
+- Search exact physical barcodes against Discogs releases without any studio/live, country, label, year, compilation, singles or format filters.
+- When a barcode resolves only to a product name, search all Discogs album masters rather than misidentifying a pressing.
+- If neither barcode nor title resolves, open manual album entry with the scanned barcode preserved.
+- Make Color/Edition/Pressing optional on Configure Album for both Collection and Wishlist, and keep barcode editable.
+- When no pressing has been chosen, do not save an invented Discogs release ID, pressing color, or catalog number.
+- Preserve the scanned barcode when choosing an album or subsequently selecting its release.
+- Add regression tests for exact barcode lookup, title fallback, optional pressing and save navigation.
+- No MongoDB migration.
+
 ## 3.3.0-clemons.3 — November 1, 2026
 
 **Direct album editor navigation fix.**

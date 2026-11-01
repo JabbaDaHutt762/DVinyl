@@ -21,6 +21,7 @@ import { resolveBarcodeWithAi } from '../ai/barcode';
 import { pressingOptions } from '../../plugins/music/pressingOptions';
 import { studioAlbumsForArtist, discogsMastersForStudioAlbum } from '../../plugins/music/studioCatalog';
 import { musicSearchPreferences } from '../../plugins/music/searchPreferences';
+import { unfilteredMusicLookup, isMusicBarcodeScan } from '../../plugins/music/barcodeScan';
 import { identifyFromPhoto } from '../ai/photo';
 import { IdentificationGuess } from '../ai/identify';
 import { isAcceptedImage } from '../ai/images';
@@ -131,6 +132,8 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       // correcting the product name by hand no longer detaches it from the saved item.
       const postedBarcode = String(req.body.scanned_barcode || '');
       let scannedBarcode = isBarcodeQuery(postedBarcode) ? postedBarcode.replace(/[- ]/g, '') : '';
+      // Scanner input and follow-up searches must never inherit album filters.
+      const unfilteredScan = isMusicBarcodeScan(plugin.id, rawQuery, scannedBarcode);
       // Set only when this request resolved a barcode: the fallback below rewrites a
       // seller's product name, never what the user typed themselves.
       let resolvedTitle = '';
@@ -146,7 +149,36 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       const identifierCode = exactIdentifier ? rawQuery.replace(/[- ]/g, '') : '';
 
       try {
-        // Scanned barcode: resolve to a product title via UPC lookup first
+        // Barcode scanning is its own workflow: first search Discogs for the
+        // physical barcode across ALL releases (not the filtered artist list).
+        if (unfilteredScan && isBarcodeQuery(rawQuery) && source?.id === 'discogs') {
+          try {
+            const scanMatches = await source.search(rawQuery.replace(/[- ]/g, ''), {
+              ...unfilteredMusicLookup(type || 'vinyl'), barcode_lookup: true
+            } as any);
+            if (scanMatches.length) {
+              const code = rawQuery.replace(/[- ]/g, '');
+              for (const item of scanMatches) {
+                item.source = 'discogs';
+                item.confirmPath = confirmPathFor(plugin.id, item, { searchType: type, scannedBarcode: code });
+              }
+              return res.render('add', {
+                results: scanMatches,
+                searchFields: unfilteredMusicLookup(type || 'vinyl'),
+                searchQuery: code,
+                searchType: type || 'vinyl',
+                scanned_barcode: code,
+                user: res.locals.user,
+                currentType: 'add-music',
+                sources, activeSource: source.id, plugin
+              });
+            }
+          } catch (error: any) {
+            console.warn('[barcode] Exact Discogs scan unavailable; trying title fallback:', error.message);
+          }
+        }
+        // When the exact Discogs barcode is unknown, UPCitemdb or AI may
+        // supply a title. It is a guess, never a confirmed physical pressing.
         if (plugin.supportsBarcodeSearch && isBarcodeQuery(rawQuery)) {
           const { barcode, title } = await lookupBarcodeTitle(rawQuery, plugin.barcodeNoiseTerms);
           scannedBarcode = barcode;
@@ -157,20 +189,18 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           // barcode is reported unknown exactly as before.
           if (!title) guess = await resolveBarcodeWithAi(barcode, plugin.id);
           if (!title && !guess) {
-            // Searching the digits themselves cannot match: these providers index titles,
-            // not barcodes. Say the barcode is unknown rather than show an empty result
-            // list, which reads as "you don't own this" instead of "I couldn't look it up".
+            if (plugin.id === 'music') {
+              // A missing barcode database entry must not block collection or
+              // Wishlist adds. Let the user enter the album and keep the code.
+              const params = new URLSearchParams({ barcode });
+              return res.redirect(303, `${res.locals.baseUrl || ''}/add-music/manual?${params}`);
+            }
             return res.render('add', {
-              results: [],
-              error: req.t('add_vinyl.barcode_not_found'),
-              searchType: type || plugin.id,
-              searchQuery: rawQuery,
-              scanned_barcode: barcode,
-              user: res.locals.user,
-              currentType: `add-${plugin.id}`,
-              sources,
-              activeSource: source?.id || '',
-              plugin
+              results: [], error: req.t('add_vinyl.barcode_not_found'),
+              searchType: type || plugin.id, searchQuery: rawQuery,
+              scanned_barcode: barcode, user: res.locals.user,
+              currentType: `add-${plugin.id}`, sources,
+              activeSource: source?.id || '', plugin
             });
           }
           searchQuery = title || '';
@@ -240,7 +270,10 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             genre_filter,
             label_filter,
             language: req.language,
-            pluginSettings: settings?.pluginSettings?.[plugin.id] || {}
+            pluginSettings: settings?.pluginSettings?.[plugin.id] || {},
+            // This override must be LAST: don't let submitted year/country,
+            // studio-only, or format filters restrict a scan or its title retry.
+            ...(unfilteredScan ? { ...unfilteredMusicLookup(type || 'vinyl'), barcode_lookup: true } : {})
           };
           // Artist discography first: only official, primary-type Album entries
           // without Live, Compilation and other secondary classifications.
@@ -314,6 +347,14 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             // A POST-redirect-GET avoids resubmission warnings on refresh.
             return res.redirect(303, `${res.locals.baseUrl || ''}/confirm-music/${releaseId}?${params}`);
           }
+        }
+
+        // If a barcode title guess had no Discogs match, still let the user
+        // add it to either list without requiring a Discogs pressing.
+        if (unfilteredScan && plugin.id === 'music' && results.length === 0 && scannedBarcode) {
+          const params = new URLSearchParams({ barcode: scannedBarcode });
+          if (resolvedTitle) params.set('title', resolvedTitle.slice(0, 160));
+          return res.redirect(303, `${res.locals.baseUrl || ''}/add-music/manual?${params}`);
         }
 
         // What the search box shows on the way back. After a scan the digits are useless
@@ -723,6 +764,9 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         // input from here on, free to be corrected or cleared like anything else.
         if (typeof req.query.barcode === 'string' && req.query.barcode) {
           defaults.barcode = req.query.barcode;
+        }
+        if (plugin.id === 'music' && typeof req.query.title === 'string' && req.query.title.trim()) {
+          defaults.title = req.query.title.trim().slice(0, 160);
         }
 
         const suggestions = await buildFieldSuggestions(plugin, activeCollectionId, defaults);

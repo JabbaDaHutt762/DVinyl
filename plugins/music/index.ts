@@ -347,7 +347,7 @@ export const musicPlugin: PluginDefinition = {
   // The advanced filters, handed back so a second search keeps them. format_filter takes
   // any Discogs format name, for the formats the three buttons do not cover (8-track,
   // MiniDisc, shellac...), and replaces the button's format in the Discogs query.
-  searchFormFields: ['year', 'country', 'genre_filter', 'label_filter', 'format_filter'],
+  searchFormFields: ['year', 'country', 'genre_filter', 'label_filter', 'format_filter', 'browse_mode'],
   imageSearchType: 'music',
   importers: musicImporters,
   apiRoutes: musicApiRoutes,

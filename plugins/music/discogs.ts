@@ -1,5 +1,6 @@
 import { SearchProvider, SearchOptions, SearchResult, ConfirmData } from '../../core/types';
 import { fetchJson } from '../../core/helpers';
+import { validDiscogsMasterId, prioritizeMatchingMasters } from './discogsBrowse';
 import { STANDARD_FORMAT_TERMS } from './constants';
 
 export class DiscogsProvider implements SearchProvider {
@@ -21,10 +22,20 @@ export class DiscogsProvider implements SearchProvider {
 
     let searchUrls: string[] = [];
     let isDirectRelease = false;
+    const masterId = validDiscogsMasterId(options.master_id);
+    const browseAlbums = options.browse_mode !== 'pressings' && !masterId;
 
     const urlMatch = query.match(/discogs\.com\/(?:[a-zA-Z]{2}\/)?(release|master)\/(\d+)/);
 
-    if (urlMatch) {
+    // An album selection uses a master ID; only pressings go to getDetails().
+    if (masterId) {
+      let advancedParams = '';
+      if (year) advancedParams += `&year=${encodeURIComponent(year)}`;
+      if (country) advancedParams += `&country=${encodeURIComponent(country)}`;
+      if (genre_filter) advancedParams += `&genre=${encodeURIComponent(genre_filter)}`;
+      if (label_filter) advancedParams += `&label=${encodeURIComponent(label_filter)}`;
+      searchUrls.push(`https://api.discogs.com/database/search?master_id=${masterId}&type=release&format=${encodeURIComponent(format_filter || type)}&per_page=100${advancedParams}&token=${token}`);
+    } else if (urlMatch) {
       const itemType = urlMatch[1];
       const itemId = urlMatch[2];
 
@@ -41,7 +52,10 @@ export class DiscogsProvider implements SearchProvider {
       if (genre_filter) advancedParams += `&genre=${encodeURIComponent(genre_filter)}`;
       if (label_filter) advancedParams += `&label=${encodeURIComponent(label_filter)}`;
 
-      if (format_filter) {
+      if (browseAlbums) {
+        // One search tile per Discogs master instead of one per pressing.
+        searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100${advancedParams}&token=${token}`);
+      } else if (format_filter) {
         searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&format=${encodeURIComponent(format_filter)}${advancedParams}&token=${token}`);
       } else if (type === 'cd' && enableAdvancedCD) {
         searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&format=CD${advancedParams}&token=${token}`);
@@ -100,7 +114,8 @@ export class DiscogsProvider implements SearchProvider {
       }
     }
 
-    return deduplicatedResults.slice(0, 100).map(item => {
+    const ordered = browseAlbums && !urlMatch ? prioritizeMatchingMasters(deduplicatedResults, query) : deduplicatedResults;
+    return ordered.slice(0, 100).map(item => {
       let variant_info = '';
 
       if (item.formats && item.formats[0] && item.formats[0].text) {
@@ -120,6 +135,7 @@ export class DiscogsProvider implements SearchProvider {
 
       return {
         id: String(item.id),
+        is_master: browseAlbums && !urlMatch,
         title: title,
         creator: creator,
         artist: creator,

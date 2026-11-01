@@ -123,6 +123,42 @@
         <% } %>
     </form>
 
+    <% if (locals.results && plugin.id === 'music' && locals.selectedMaster) { %>
+        <section class="card-theme rounded-2xl p-4 mb-6" aria-label="Selected album">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div>
+                    <p class="text-xs uppercase font-bold opacity-50">Choose your pressing</p>
+                    <h2 class="text-lg font-bold"><%= selectedMaster.title || 'Selected album' %></h2>
+                </div>
+                <form method="POST" action="<%= baseUrl %>/search-music">
+                    <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
+                    <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
+                    <input type="hidden" name="browse_mode" value="albums">
+                    <input type="hidden" name="source" value="<%= locals.activeSource || 'discogs' %>">
+                    <button type="submit" class="text-sm font-bold text-primary-theme hover:underline">Back to albums</button>
+                </form>
+            </div>
+            <form method="POST" action="<%= baseUrl %>/search-music" class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
+                <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
+                <input type="hidden" name="browse_mode" value="pressings">
+                <input type="hidden" name="master_id" value="<%= selectedMaster.id %>">
+                <input type="hidden" name="master_title" value="<%= selectedMaster.title %>">
+                <input type="hidden" name="source" value="<%= locals.activeSource || 'discogs' %>">
+                <label class="text-xs font-bold">Year
+                    <input name="year" type="number" value="<%= (locals.searchFields || {}).year || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
+                </label>
+                <label class="text-xs font-bold">Country
+                    <input name="country" type="text" value="<%= (locals.searchFields || {}).country || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
+                </label>
+                <label class="text-xs font-bold">Label
+                    <input name="label_filter" type="text" value="<%= (locals.searchFields || {}).label_filter || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
+                </label>
+                <button type="submit" class="p-2 rounded-lg bg-primary-theme text-white font-bold text-sm">Filter pressings</button>
+            </form>
+        </section>
+    <% } %>
+
     <% if (locals.results) { %>
         <div class="mb-4 flex items-center justify-between">
             <h2 class="text-xl font-bold transition-colors"><%= t('add_' + plugin.i18nKey + '.results_title', { defaultValue: t('add_vinyl.results_title') }) %></h2>
@@ -155,7 +191,19 @@
             %>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <% results.forEach(item => { %>
-                    <a href="<%= baseUrl %><%= item.confirmPath %>" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
+                    <% const albumMaster = plugin.id === 'music' && item.is_master && item.source === 'discogs'; %>
+                    <% if (albumMaster) { %>
+                        <form method="POST" action="<%= baseUrl %>/search-music" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
+                            <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
+                            <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
+                            <input type="hidden" name="source" value="<%= item.source %>">
+                            <input type="hidden" name="browse_mode" value="pressings">
+                            <input type="hidden" name="master_id" value="<%= item.id %>">
+                            <input type="hidden" name="master_title" value="<%= item.title %>">
+                            <button type="submit" class="w-full h-full flex flex-col text-left">
+                    <% } else { %>
+                        <a href="<%= baseUrl %><%= item.confirmPath %>" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
+                    <% } %>
                         <div class="relative <%= aspect %> bg-black/5 dark:bg-white/5">
                             <% if (item.cover_image && !item.cover_image.includes('spacer.gif')) { %>
                                 <img src="<%= item.cover_image %>" loading="lazy" onerror="this.onerror=null; this.src='<%= baseUrl %>/ressources/logo.png';" class="w-full h-full object-cover">
@@ -202,6 +250,9 @@
                                 </div>
                             <% } %>
 
+                            <% if (albumMaster) { %>
+                                <p class="mt-auto mb-2 text-xs font-bold text-primary-theme">View pressings &rarr;</p>
+                            <% } %>
                             <div class="flex flex-wrap gap-1 mt-auto">
                                 <% if (Array.isArray(item.format)) { %>
                                     <% item.format.slice(0, 2).forEach(fmt => { %>
@@ -216,7 +267,12 @@
                                 <% } %>
                             </div>
                         </div>
-                    </a>
+                    <% if (albumMaster) { %>
+                            </button>
+                        </form>
+                    <% } else { %>
+                        </a>
+                    <% } %>
                 <% }) %>
             </div>
         <% } %>

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validDiscogsMasterId, prioritizeMatchingMasters, exactArtistMasters, groupAlbumMasters } from '../plugins/music/discogsBrowse';
 import { DiscogsProvider } from '../plugins/music/discogs';
+import { officialStudioGroups } from '../plugins/music/studioCatalog';
 import { classifyDiscogsMaster, filterDiscogsMasters } from '../plugins/music/discogsFilters';
 import { pressingOptions } from '../plugins/music/pressingOptions';
 
@@ -188,4 +189,38 @@ test('album and configure templates compile (search/pressing routing smoke test)
   ]) {
     assert.doesNotThrow(() => ejs.compile(readFileSync(filename, 'utf8'), { filename }), filename);
   }
+});
+
+
+test('core studio catalog only includes original studio albums, not compilations/live/bootlegs/singles', () => {
+  const artist = 'The Doors';
+  const titles = [
+    'The Doors','Strange Days','Waiting for the Sun',
+    'The Soft Parade','Morrison Hotel','L.A. Woman'
+  ];
+  const uuid = (i: number) => '11111111-2222-3333-4444-' + String(i).padStart(12, '0');
+  const groups: any[] = [
+    ...titles.map((title, i) => ({
+      id: uuid(i + 1), title, 'primary-type': 'Album', 'secondary-types': [],
+      'first-release-date': i < 2 ? '1967-01-01' : String(1968 + i - 2) + '-01-01'
+    })),
+    { id: uuid(8), title: 'Absolutely Live', 'primary-type': 'Album', 'secondary-types':['Live'], 'first-release-date':'1970-01-01' },
+    { id: uuid(9), title: 'The Best of The Doors', 'primary-type': 'Album', 'secondary-types':['Compilation'], 'first-release-date':'1973' },
+    { id: uuid(10), title: 'Live in Europe', 'primary-type': 'Album', 'secondary-types':[], 'first-release-date':'2014' },
+    { id: uuid(11), title: 'Light My Fire', 'primary-type': 'Single', 'secondary-types':[], 'first-release-date':'1967' },
+    { id: uuid(12), title: 'Rarities', 'primary-type': 'Album', 'secondary-types':[], 'first-release-date':'2011' }
+  ];
+  const results = officialStudioGroups(groups, artist);
+  assert.deepEqual(results.map(x => x.title).sort(), titles.slice().sort());
+  assert.equal(results.every(x => x.is_studio_album && !x.is_master), true);
+});
+
+test('studio album pages show original release year rather than pressing year', () => {
+  const rows = officialStudioGroups([{
+    id:'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    title: 'Abbey Road', 'primary-type':'Album', 'secondary-types':[],
+    'first-release-date':'1969-09-26'
+  }], 'The Beatles');
+  assert.equal(rows[0]?.year, '1969');
+  assert.match(rows[0]!.cover_image, /coverartarchive.org\/release-group\/aaaaaaaa/);
 });

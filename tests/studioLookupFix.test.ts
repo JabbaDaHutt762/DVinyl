@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { albumKey, masterLinks, matchingMasters, transientApiError } from '../plugins/music/studioMatching';
 import { discogsMastersForStudioAlbum } from '../plugins/music/studioCatalog';
 import { albumCoverFallbacks } from '../plugins/music/albumCovers';
+import { discogsFetch } from '../plugins/music/discogsFetch';
 
 test('Rolling Stones 12 × 5 matches Discogs 12 X 5', () => {
   assert.equal(albumKey('12 × 5'), albumKey('12 X 5'));
@@ -63,4 +64,27 @@ test('album cover provider maps correctly credited matching album art', async ()
     const covers = await albumCoverFallbacks('The Doors');
     assert.equal(covers.get(albumKey('L.A. Woman')), 'https://example.test/600x600bb.jpg');
   } finally { globalThis.fetch = previous; }
+});
+
+test('Discogs 429 responses are retried and token stays out of request URL', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldToken = process.env.DISCOGS_TOKEN;
+  process.env.DISCOGS_TOKEN = 'dummy-test-token';
+  let attempts = 0;
+  globalThis.fetch = async (input: any, options: any) => {
+    attempts++;
+    assert.equal(String(input).includes('dummy-test-token'), false);
+    assert.equal(options.headers.Authorization, 'Discogs token=dummy-test-token');
+    if (attempts === 1) return new Response('Rate limited', {status: 429});
+    return new Response(JSON.stringify({results:[{id:100}]}), {status:200});
+  };
+  try {
+    const data = await discogsFetch('https://api.discogs.com/database/search?artist=The+Doors&token=dummy-test-token');
+    assert.equal(attempts, 2);
+    assert.equal(data.results[0].id, 100);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldToken === undefined) delete process.env.DISCOGS_TOKEN;
+    else process.env.DISCOGS_TOKEN = oldToken;
+  }
 });

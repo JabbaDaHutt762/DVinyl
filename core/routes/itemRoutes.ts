@@ -226,6 +226,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         if (selectedMasterId) {
           res.locals.selectedMaster = {
             id: selectedMasterId,
+            master_ids: selectedMasterIds.join(','),
             title: typeof req.body.master_title === 'string' ? req.body.master_title.slice(0, 160) : ''
           };
         }

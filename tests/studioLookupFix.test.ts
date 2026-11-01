@@ -29,6 +29,8 @@ test('temporary HTTP rate limits and server errors are retryable', () => {
 
 test('selected MusicBrainz release group opens its linked Discogs master', async () => {
   const previous = globalThis.fetch;
+  const oldToken = process.env.DISCOGS_TOKEN;
+  process.env.DISCOGS_TOKEN = 'test-token';
   const requested: string[] = [];
   globalThis.fetch = async (input: any) => {
     const url = String(input);
@@ -44,7 +46,11 @@ test('selected MusicBrainz release group opens its linked Discogs master', async
     assert.deepEqual(ids, ['30169']);
     assert.equal(requested.length, 1);
     assert.match(requested[0]!, /musicbrainz.org\/ws\/2\/release-group/);
-  } finally { globalThis.fetch = previous; }
+  } finally {
+    globalThis.fetch = previous;
+    if (oldToken === undefined) delete process.env.DISCOGS_TOKEN;
+    else process.env.DISCOGS_TOKEN = oldToken;
+  }
 });
 
 test('album cover provider maps correctly credited matching album art', async () => {

@@ -149,11 +149,15 @@
                             const retry = document.getElementById('retry-pressings');
                             if (!selection) return;
                             selection.addEventListener('change', () => {
-                                if (!selection.value || !selection.dataset.masterId) return;
+                                if (!selection.value) return;
                                 const url = new URL(selection.dataset.confirmUrl + encodeURIComponent(selection.value), window.location.origin);
                                 url.searchParams.set('source', 'discogs');
-                                url.searchParams.set('master_id', selection.dataset.masterId);
-                                url.searchParams.set('master_ids', selection.dataset.masterIds);
+                                // Barcode-matched release lists may have no master ID:
+                                // the selected release itself is a valid Discogs edition.
+                                if (selection.dataset.masterId) {
+                                    url.searchParams.set('master_id', selection.dataset.masterId);
+                                    url.searchParams.set('master_ids', selection.dataset.masterIds);
+                                }
                                 url.searchParams.set('type', selection.dataset.format);
                                 url.searchParams.set('country', selection.dataset.country);
                                 if (selection.dataset.scannedBarcode) {

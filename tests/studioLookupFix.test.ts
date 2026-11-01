@@ -1,0 +1,60 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { albumKey, masterLinks, matchingMasters, transientApiError } from '../plugins/music/studioMatching';
+import { discogsMastersForStudioAlbum } from '../plugins/music/studioCatalog';
+import { albumCoverFallbacks } from '../plugins/music/albumCovers';
+
+test('Rolling Stones 12 × 5 matches Discogs 12 X 5', () => {
+  assert.equal(albumKey('12 × 5'), albumKey('12 X 5'));
+  assert.deepEqual(matchingMasters([
+    { id: 1234, title: 'Rolling Stones, The - 12 X 5' },
+    { id: 9001, title: '3 Doors Down - 12 X 5' }
+  ], 'The Rolling Stones', '12 × 5'), ['1234']);
+});
+
+test('MusicBrainz Discogs master relationship extracts stable ID', () => {
+  const relations = [
+    { url: { resource: 'https://www.discogs.com/master/30169-The-Rolling-Stones-12-X-5' } },
+    { url: { resource: 'https://www.discogs.com/master/30169' } },
+    { url: { resource: 'https://www.discogs.com/release/9000' } }
+  ];
+  assert.deepEqual(masterLinks(relations), ['30169']);
+});
+
+test('temporary HTTP rate limits and server errors are retryable', () => {
+  assert.equal(transientApiError({status:429}), true);
+  assert.equal(transientApiError({status:503}), true);
+  assert.equal(transientApiError({status:404}), false);
+});
+
+test('selected MusicBrainz release group opens its linked Discogs master', async () => {
+  const previous = globalThis.fetch;
+  const requested: string[] = [];
+  globalThis.fetch = async (input: any) => {
+    const url = String(input);
+    requested.push(url);
+    return new Response(JSON.stringify({
+      relations: [{ url: { resource: 'https://www.discogs.com/master/30169-12-X-5' } }]
+    }), { status:200 });
+  };
+  try {
+    const ids = await discogsMastersForStudioAlbum(
+      'The Rolling Stones', '12 × 5', '11111111-2222-3333-4444-555555555555'
+    );
+    assert.deepEqual(ids, ['30169']);
+    assert.equal(requested.length, 1);
+    assert.match(requested[0]!, /musicbrainz.org\/ws\/2\/release-group/);
+  } finally { globalThis.fetch = previous; }
+});
+
+test('album cover provider maps correctly credited matching album art', async () => {
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({results:[
+    { artistName: 'The Doors', collectionName: 'L.A. Woman', artworkUrl100: 'https://example.test/100x100bb.jpg' },
+    { artistName: 'Another Artist', collectionName: 'L.A. Woman', artworkUrl100: 'https://example.test/other.jpg' }
+  ]}), { status:200 });
+  try {
+    const covers = await albumCoverFallbacks('The Doors');
+    assert.equal(covers.get(albumKey('L.A. Woman')), 'https://example.test/600x600bb.jpg');
+  } finally { globalThis.fetch = previous; }
+});

@@ -3,6 +3,19 @@
 This is a community-maintained fork of [Kyonew/DVinyl](https://github.com/Kyonew/DVinyl).
 Version numbers use the `-clemons.N` suffix to distinguish our work from official releases.
 
+## 3.3.0-clemons.5 — November 1, 2026
+
+**Barcode grouping and search-filter regression fix.**
+
+- Corrects hidden scanned-barcode state leaking into subsequent artist searches. New text searches now obey Core Studio Albums, Artist Only, Non-live, compilation and singles defaults.
+- Groups Discogs releases returned by a scanned UPC into one album card per artist/title, rather than displaying dozens of pressing variants.
+- Opens Configure Album directly from each grouped scan result. Matching release editions are available from the in-session barcode search, without an additional master search.
+- Maintains the optional pressing field and preserves the UPC through album selection and into the saved record.
+- Restores the normal album-filter UI after barcode scanning, while retaining fully unfiltered barcode lookups.
+- Adds regression tests for 50-release barcode result grouping, scan-to-search state isolation, album editor navigation and optional pressing selection.
+
+No MongoDB migration. Manual confirmation on a running installation is still recommended.
+
 ## 3.3.0-clemons.4 — November 1, 2026
 
 **Unfiltered barcode scanning and optional pressing selection.**

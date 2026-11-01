@@ -21,7 +21,7 @@ import { resolveBarcodeWithAi } from '../ai/barcode';
 import { pressingOptions } from '../../plugins/music/pressingOptions';
 import { studioAlbumsForArtist, discogsMastersForStudioAlbum } from '../../plugins/music/studioCatalog';
 import { musicSearchPreferences } from '../../plugins/music/searchPreferences';
-import { unfilteredMusicLookup, isMusicBarcodeScan } from '../../plugins/music/barcodeScan';
+import { unfilteredMusicLookup, isMusicBarcodeScan, groupBarcodeResults } from '../../plugins/music/barcodeScan';
 import { identifyFromPhoto } from '../ai/photo';
 import { IdentificationGuess } from '../ai/identify';
 import { isAcceptedImage } from '../ai/images';
@@ -134,7 +134,8 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       let scannedBarcode = isBarcodeQuery(postedBarcode) ? postedBarcode.replace(/[- ]/g, '') : '';
       // Scanner input and follow-up searches must never inherit album filters.
       const unfilteredScan = isMusicBarcodeScan(plugin.id, rawQuery, scannedBarcode);
-      if (unfilteredScan) res.locals.searchFields = unfilteredMusicLookup(type || 'vinyl');
+      if (plugin.id === 'music' && !unfilteredScan) scannedBarcode = '';
+      if (unfilteredScan) res.locals.searchFields = musicSearchPreferences({}, {});
       // Set only when this request resolved a barcode: the fallback below rewrites a
       // seller's product name, never what the user typed themselves.
       let resolvedTitle = '';
@@ -159,18 +160,45 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             } as any);
             if (scanMatches.length) {
               const code = rawQuery.replace(/[- ]/g, '');
+              // Many Discogs releases can share one printed barcode. They are
+              // not 50 different albums: show one album card, retain the exact
+              // matching release IDs for the optional edition selector.
+              const albums = groupBarcodeResults(scanMatches);
+              if (albums.length) {
+                if (req.session) req.session.barcodeScanGroups = {
+                  barcode: code, expires: Date.now() + 10 * 60 * 1000,
+                  albums
+                };
+                const groupedResults = albums.map((album, index) => ({
+                  id: code + '-' + index,
+                  title: album.title, artist: album.artist, creator: album.artist,
+                  year: album.year, cover_image: album.cover_image,
+                  is_barcode_album: true, source: 'discogs',
+                  country: '', format: [], matching_pressings: album.pressings.length
+                }));
+                return res.render('add', {
+                  results: groupedResults,
+                  searchFields: musicSearchPreferences({}, {}),
+                  barcodeScanResults: true,
+                  searchQuery: code,
+                  searchType: type || 'vinyl',
+                  scanned_barcode: code,
+                  user: res.locals.user, currentType: 'add-music',
+                  sources, activeSource: source.id, plugin
+                });
+              }
               for (const item of scanMatches) {
                 item.source = 'discogs';
                 item.confirmPath = confirmPathFor(plugin.id, item, { searchType: type, scannedBarcode: code });
               }
               return res.render('add', {
                 results: scanMatches,
-                searchFields: unfilteredMusicLookup(type || 'vinyl'),
+                searchFields: musicSearchPreferences({}, {}),
+                barcodeScanResults: true,
                 searchQuery: code,
                 searchType: type || 'vinyl',
                 scanned_barcode: code,
-                user: res.locals.user,
-                currentType: 'add-music',
+                user: res.locals.user, currentType: 'add-music',
                 sources, activeSource: source.id, plugin
               });
             }
@@ -402,6 +430,8 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           searchQuery: boxQuery,
           identifierCode,
           scanned_barcode: scannedBarcode,
+          barcodeScanResults: unfilteredScan,
+          ...(unfilteredScan && plugin.id === 'music' ? { searchFields: musicSearchPreferences({}, {}) } : {}),
           user: res.locals.user,
           currentType: `add-${plugin.id}`,
           sources,
@@ -457,7 +487,8 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         const albumId = String(req.params.albumId || '');
         const isStudio = /^studio-[0-9a-f-]{36}$/i.test(albumId);
         const isMaster = /^master-[1-9][0-9]{0,11}$/.test(albumId);
-        if (!isStudio && !isMaster) return res.status(400).json({ error: 'Invalid album ID' });
+        const isScan = /^scan-[0-9]{12,13}-[0-9]{1,3}$/.test(albumId);
+        if (!isStudio && !isMaster && !isScan) return res.status(400).json({ error: 'Invalid album ID' });
         const artist = String(req.query.artist || '').slice(0, 140);
         const album = String(req.query.album || '').slice(0, 180);
         const type = ['vinyl', 'cd', 'cassette'].includes(String(req.query.type)) ? String(req.query.type) : 'vinyl';
@@ -466,6 +497,28 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         const source = resolveSource(plugin, 'discogs', res.locals.settings);
         if (!source) return res.status(503).json({ error: 'Discogs is unavailable' });
         try {
+          if (isScan) {
+            const match = /^scan-([0-9]{12,13})-([0-9]{1,3})$/.exec(albumId)!;
+            const barcode = match[1];
+            const index = Number(match[2]);
+            const cached = req.session?.barcodeScanGroups;
+            const albums = cached && cached.barcode === barcode && cached.expires > Date.now()
+              && Array.isArray(cached.albums)
+              ? cached.albums
+              : groupBarcodeResults(await source.search(barcode, {
+                  ...unfilteredMusicLookup(type), barcode_lookup: true
+                } as any));
+            const album = albums[index];
+            if (!album || album.artist !== artist || album.title !== req.query.album) {
+              return res.json({ pressings: [], country: '', master_id: '', master_ids: '',
+                notice: 'Barcode editions could not be retrieved. You may save this album without specifying a pressing.' });
+            }
+            return res.json({
+              pressings: pressingOptions(album.pressings), country: '',
+              master_id: '', master_ids: '',
+              notice: album.pressings.length + ' release(s) match the scanned barcode. Pressing selection is optional.'
+            });
+          }
           const rawIds = isStudio
             ? await discogsMastersForStudioAlbum(artist, album, albumId.slice(7))
             : [albumId.slice(7), ...String(req.query.master_ids || '').split(',')];
@@ -522,14 +575,15 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         // has no reason to learn the vocabulary of each one.
         const studioPreview = plugin.id === 'music'
           && (/^studio-[0-9a-f-]{36}$/i.test(String(externalId))
-            || /^master-[1-9][0-9]{0,11}$/.test(String(externalId)));
+            || /^master-[1-9][0-9]{0,11}$/.test(String(externalId))
+            || /^scan-[0-9]{12,13}-[0-9]{1,3}$/.test(String(externalId)));
         const rawArtist = String(req.query.artist || '').slice(0, 140);
         const rawAlbum = String(req.query.album || '').slice(0, 180);
         if (studioPreview && (!rawArtist || !rawAlbum)) return res.status(400).send('Album and artist required');
         // This preview needs no external API request. Edition lookup loads via
         // a separate JSON endpoint after the editor is already visible.
         const rawCover = String(req.query.cover || '');
-        const albumCover = /^https:\/\/(?:coverartarchive\.org|[a-z0-9-]+\.mzstatic\.com)\//i.test(rawCover)
+        const albumCover = /^https:\/\/(?:coverartarchive\.org|[a-z0-9-]+\.mzstatic\.com|i\.discogs\.com|img\.discogs\.com)\//i.test(rawCover)
           ? rawCover : /^studio-[0-9a-f-]{36}$/i.test(String(externalId))
             ? 'https://coverartarchive.org/release-group/' + String(externalId).slice(7) + '/front-250'
             : '';

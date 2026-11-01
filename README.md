@@ -15,7 +15,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/Version-3.3.0--clemons.4-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-3.3.0--clemons.5-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/Self--Hosted-Yes-green.svg" alt="Self-Hosted">
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/ZimaOS-App_Store-black.svg" alt="ZimaOS">
@@ -26,7 +26,7 @@
 ## Clemons fork — music search improvements
 
 This community fork is based on upstream DVinyl 3.3.0. Its release
-**3.3.0-clemons.4** includes artist-first studio discographies (MusicBrainz),
+**3.3.0-clemons.5** includes artist-first studio discographies (MusicBrainz),
 Discogs pressing selection, a default US preference, live/compilation filters,
 and missing-cover/temporary-API-failure handling.
 

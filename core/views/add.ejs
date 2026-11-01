@@ -34,7 +34,7 @@
         <% } else if (locals.searchType) { %>
             <input type="hidden" name="type" value="<%= searchType %>">
         <% } %>
-        <% if (locals.scanned_barcode) { %>
+        <% if (locals.scanned_barcode && !locals.barcodeScanResults) { %>
             <%# Keeps the scanned code on the item when its product name has to be fixed by hand %>
             <input type="hidden" name="scanned_barcode" value="<%= scanned_barcode %>">
         <% } %>
@@ -203,10 +203,10 @@
             %>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <% results.forEach(item => { %>
-                    <% const albumMaster = plugin.id === 'music' && item.source === 'discogs' && (item.is_master || item.is_studio_album); %>
+                    <% const albumMaster = plugin.id === 'music' && item.source === 'discogs' && (item.is_master || item.is_studio_album || item.is_barcode_album); %>
                     <% if (albumMaster) { %>
                         <%# Album click is navigation to the editor, never another POST to search-music. %>
-                        <a href="<%= baseUrl %>/confirm-music/<%= item.is_studio_album ? 'studio-' : 'master-' %><%= item.id %>?artist=<%= encodeURIComponent(item.artist || item.creator || '') %>&album=<%= encodeURIComponent(item.title || '') %>&year=<%= encodeURIComponent(item.year || '') %>&country=<%= encodeURIComponent((locals.searchFields || {}).country ?? 'US') %>&type=<%= encodeURIComponent(locals.searchType || 'vinyl') %>&barcode=<%= encodeURIComponent(locals.scanned_barcode || '') %>&cover=<%= encodeURIComponent(item.cover_image_fallback || item.cover_image || '') %><%= item.is_studio_album ? '' : '&master_ids=' + encodeURIComponent((item.master_ids || [item.id]).join(',')) %>"
+                        <a href="<%= baseUrl %>/confirm-music/<%= item.is_barcode_album ? 'scan-' : (item.is_studio_album ? 'studio-' : 'master-') %><%= item.id %>?artist=<%= encodeURIComponent(item.artist || item.creator || '') %>&album=<%= encodeURIComponent(item.title || '') %>&year=<%= encodeURIComponent(item.year || '') %>&country=<%= encodeURIComponent((locals.searchFields || {}).country ?? 'US') %>&type=<%= encodeURIComponent(locals.searchType || 'vinyl') %>&barcode=<%= encodeURIComponent(locals.scanned_barcode || '') %>&cover=<%= encodeURIComponent(item.cover_image_fallback || item.cover_image || '') %><%= item.is_studio_album || item.is_barcode_album ? '' : '&master_ids=' + encodeURIComponent((item.master_ids || [item.id]).join(',')) %>"
                             class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
                     <% } else { %>
                         <a href="<%= baseUrl %><%= item.confirmPath %>" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
@@ -261,6 +261,9 @@
 
                             <% if (albumMaster) { %>
                                 <p class="mt-auto mb-2 text-xs font-bold text-primary-theme">Configure album &rarr;</p>
+                                <% if (item.is_barcode_album) { %>
+                                    <p class="text-xs opacity-60 mb-2"><%= item.matching_pressings %> matching releases · choose edition optionally</p>
+                                <% } %>
                             <% } %>
                             <div class="flex flex-wrap gap-1 mt-auto">
                                 <% if (Array.isArray(item.format)) { %>

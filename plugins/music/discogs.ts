@@ -24,13 +24,17 @@ export class DiscogsProvider implements SearchProvider {
     let searchUrls: string[] = [];
     let isDirectRelease = false;
     const masterId = validDiscogsMasterId(options.master_id);
-    const browseAlbums = options.browse_mode !== 'pressings' && !masterId;
+    const scanUnfiltered = (options as any).barcode_lookup === true;
+    const browseAlbums = !scanUnfiltered && options.browse_mode !== 'pressings' && !masterId;
     const strictArtist = browseAlbums && options.artist_scope !== 'all';
 
     const urlMatch = query.match(/discogs\.com\/(?:[a-zA-Z]{2}\/)?(release|master)\/(\d+)/);
 
-    // An album selection uses a master ID; only pressings go to getDetails().
-    if (masterId) {
+    // Scan by physical barcode first. Never constrain release format, country,
+    // year, studio classification, or other interactive album filters.
+    if (scanUnfiltered && /^[0-9]{12,13}$/.test(query.replace(/[- ]/g, ''))) {
+      searchUrls.push(`https://api.discogs.com/database/search?barcode=${encodeURIComponent(query.replace(/[- ]/g, ''))}&type=release&per_page=100&token=${token}`);
+    } else if (masterId) {
       let advancedParams = '';
       if (year) advancedParams += `&year=${encodeURIComponent(year)}`;
       if (country) advancedParams += `&country=${encodeURIComponent(country)}`;
@@ -55,7 +59,11 @@ export class DiscogsProvider implements SearchProvider {
       if (genre_filter) advancedParams += `&genre=${encodeURIComponent(genre_filter)}`;
       if (label_filter) advancedParams += `&label=${encodeURIComponent(label_filter)}`;
 
-      if (browseAlbums) {
+      if (scanUnfiltered) {
+        // Barcode-derived titles are uncertain; search all release types and
+        // editions instead of applying even the Vinyl/CD format filter.
+        searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&per_page=100&token=${token}`);
+      } else if (browseAlbums) {
         // One search tile per Discogs master instead of one per pressing.
         searchUrls.push(`https://api.discogs.com/database/search?${strictArtist ? 'artist' : 'q'}=${encodeURIComponent(query)}&type=master&per_page=100${advancedParams}&token=${token}`);
       } else if (format_filter) {

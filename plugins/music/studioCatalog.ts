@@ -1,4 +1,5 @@
 import { fetchJson } from '../../core/helpers';
+import type { SearchResult } from '../../core/types';
 import { artistKey } from './discogsBrowse';
 
 const MB = 'https://musicbrainz.org/ws/2';
@@ -7,7 +8,7 @@ const catalogCache = new Map<string, { expires: number; results: StudioAlbum[] }
 let nextRequestAt = 0;
 let queue = Promise.resolve();
 
-export interface StudioAlbum {
+export interface StudioAlbum extends SearchResult {
   id: string;
   title: string;
   creator: string;

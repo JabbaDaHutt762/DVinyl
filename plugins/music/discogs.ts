@@ -1,6 +1,6 @@
 import { SearchProvider, SearchOptions, SearchResult, ConfirmData } from '../../core/types';
 import { fetchJson } from '../../core/helpers';
-import { validDiscogsMasterId, prioritizeMatchingMasters } from './discogsBrowse';
+import { validDiscogsMasterId, prioritizeMatchingMasters, exactArtistMasters, groupAlbumMasters } from './discogsBrowse';
 import { filterDiscogsMasters } from './discogsFilters';
 import { STANDARD_FORMAT_TERMS } from './constants';
 
@@ -25,6 +25,7 @@ export class DiscogsProvider implements SearchProvider {
     let isDirectRelease = false;
     const masterId = validDiscogsMasterId(options.master_id);
     const browseAlbums = options.browse_mode !== 'pressings' && !masterId;
+    const strictArtist = browseAlbums && options.artist_scope !== 'all';
 
     const urlMatch = query.match(/discogs\.com\/(?:[a-zA-Z]{2}\/)?(release|master)\/(\d+)/);
 
@@ -56,7 +57,7 @@ export class DiscogsProvider implements SearchProvider {
 
       if (browseAlbums) {
         // One search tile per Discogs master instead of one per pressing.
-        searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100${advancedParams}&token=${token}`);
+        searchUrls.push(`https://api.discogs.com/database/search?${strictArtist ? 'artist' : 'q'}=${encodeURIComponent(query)}&type=master&per_page=100${advancedParams}&token=${token}`);
       } else if (format_filter) {
         searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&format=${encodeURIComponent(format_filter)}${advancedParams}&token=${token}`);
       } else if (type === 'cd' && enableAdvancedCD) {
@@ -102,6 +103,21 @@ export class DiscogsProvider implements SearchProvider {
       });
     }
 
+    // Discogs artist= remains fuzzy. Enforce the exact artist credit locally,
+    // then fall back to album-title search when the query isn't an artist.
+    if (strictArtist && !urlMatch) {
+      const exact = exactArtistMasters(allResults, query);
+      if (exact.length) allResults = exact;
+      else {
+        let extra = '';
+        if (year) extra += `&year=${encodeURIComponent(year)}`;
+        if (genre_filter) extra += `&genre=${encodeURIComponent(genre_filter)}`;
+        if (label_filter) extra += `&label=${encodeURIComponent(label_filter)}`;
+        const broad = await fetchJson(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100${extra}&token=${token}`, { headers });
+        allResults = broad.results || [];
+      }
+    }
+
     const technicalBlacklist = [
       'Vinyl', 'LP', 'Album', 'Reissue', 'Repress', 'Stereo', 'Gatefold',
       '12"', '7"', 'Limited Edition', 'Compilation', 'Deluxe Edition', 'Numbered', 'Promo'
@@ -122,7 +138,8 @@ export class DiscogsProvider implements SearchProvider {
       ? filterDiscogsMasters(deduplicatedResults, options)
       : deduplicatedResults;
     const ordered = browseAlbums && !urlMatch ? prioritizeMatchingMasters(filtered, query) : filtered;
-    return ordered.slice(0, 100).map(item => {
+    const visible = browseAlbums && !urlMatch ? groupAlbumMasters(ordered) : ordered;
+    return visible.slice(0, 100).map(item => {
       let variant_info = '';
 
       if (item.formats && item.formats[0] && item.formats[0].text) {
@@ -143,6 +160,7 @@ export class DiscogsProvider implements SearchProvider {
       return {
         id: String(item.id),
         is_master: browseAlbums && !urlMatch,
+        master_ids: item.master_ids || [],
         title: title,
         creator: creator,
         artist: creator,

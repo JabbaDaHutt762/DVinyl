@@ -134,6 +134,10 @@
                     <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
                     <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
                     <input type="hidden" name="browse_mode" value="albums">
+                    <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
+                    <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
+                    <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
+                    <input type="hidden" name="country" value="<%= Object.prototype.hasOwnProperty.call(locals.searchFields || {}, 'country') ? searchFields.country : 'US' %>">
                     <input type="hidden" name="source" value="<%= locals.activeSource || 'discogs' %>">
                     <button type="submit" class="text-sm font-bold text-primary-theme hover:underline">Back to albums</button>
                 </form>
@@ -149,7 +153,7 @@
                     <input name="year" type="number" value="<%= (locals.searchFields || {}).year || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
                 </label>
                 <label class="text-xs font-bold">Country
-                    <input name="country" type="text" value="<%= (locals.searchFields || {}).country || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
+                    <input name="country" type="text" value="<%= Object.prototype.hasOwnProperty.call(locals.searchFields || {}, 'country') ? searchFields.country : 'US' %>" placeholder="All countries" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
                 </label>
                 <label class="text-xs font-bold">Label
                     <input name="label_filter" type="text" value="<%= (locals.searchFields || {}).label_filter || '' %>" placeholder="Any" class="block mt-1 w-full p-2 rounded-lg bg-black/5 dark:bg-white/10">
@@ -198,6 +202,10 @@
                             <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
                             <input type="hidden" name="source" value="<%= item.source %>">
                             <input type="hidden" name="browse_mode" value="pressings">
+                            <input type="hidden" name="country" value="<%= Object.prototype.hasOwnProperty.call(locals.searchFields || {}, 'country') ? searchFields.country : 'US' %>">
+                            <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
+                            <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
+                            <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
                             <input type="hidden" name="master_id" value="<%= item.id %>">
                             <input type="hidden" name="master_title" value="<%= item.title %>">
                             <button type="submit" class="w-full h-full flex flex-col text-left">

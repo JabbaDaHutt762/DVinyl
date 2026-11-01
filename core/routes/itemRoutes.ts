@@ -113,7 +113,9 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       const searchFields: Record<string, string> = {};
       for (const name of plugin.searchFormFields || []) {
         const value = req.body[name];
-        if (typeof value === 'string' && value.trim()) searchFields[name] = value.trim();
+        // Preserve an intentionally cleared country field (all countries)
+        // instead of resetting it to the default United States.
+        if (typeof value === 'string' && (value.trim() || name === 'country')) searchFields[name] = value.trim();
       }
       res.locals.searchFields = searchFields;
       // Which database to ask. The form only offers the picker when the plugin has more

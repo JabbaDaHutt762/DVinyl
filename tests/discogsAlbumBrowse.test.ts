@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validDiscogsMasterId, prioritizeMatchingMasters } from '../plugins/music/discogsBrowse';
 import { DiscogsProvider } from '../plugins/music/discogs';
+import { classifyDiscogsMaster, filterDiscogsMasters } from '../plugins/music/discogsFilters';
 
 test('master IDs must be numeric and bounded', () => {
   assert.equal(validDiscogsMasterId('12345'), '12345');
@@ -59,4 +60,44 @@ test('selecting a master fetches physical pressing release IDs', async () => {
     assert.equal(items[0]?.id, '98765');
     assert.equal(items[0]?.is_master, false);
   } finally { globalThis.fetch = oldFetch; }
+});
+
+
+test('non-live is default; selecting live only or all changes results', () => {
+  const records = [
+    { id: 1, title: 'The Doors - Morrison Hotel' },
+    { id: 2, title: 'The Doors - Live at the Hollywood Bowl' },
+    { id: 3, title: 'Hole - Live Through This' }
+  ];
+  assert.deepEqual(filterDiscogsMasters(records, {}).map(r => r.id), [1, 3]);
+  assert.deepEqual(filterDiscogsMasters(records, { live_filter: 'live_only' }).map(r => r.id), [2]);
+  assert.deepEqual(filterDiscogsMasters(records, { live_filter: 'all' }).map(r => r.id), [1, 2, 3]);
+});
+
+test('compilations and EPs can be excluded independently', () => {
+  const records = [
+    { id: 1, title: 'The Doors - Morrison Hotel' },
+    { id: 2, title: 'The Doors - Greatest Hits' },
+    { id: 3, title: 'The Doors - Hello, I Love You', format: ['Vinyl', 'Single'] },
+    { id: 4, title: 'The Doors - Studio EP', format: ['EP'] }
+  ];
+  assert.deepEqual(filterDiscogsMasters(records, { hide_compilations: '1', hide_singles: '1' }).map(r => r.id), [1]);
+  assert.equal(classifyDiscogsMaster({ title: 'Artist - Live Through This' }).live, false);
+  assert.equal(classifyDiscogsMaster({ title: 'Artist - In Concert' }).live, true);
+});
+
+test('US country filter applies to pressing query, not album master query', async () => {
+  const previous = globalThis.fetch;
+  const requested: string[] = [];
+  globalThis.fetch = async (input: any) => {
+    requested.push(String(input));
+    return new Response(JSON.stringify({ results: [] }), { status: 200 });
+  };
+  try {
+    const provider = new DiscogsProvider();
+    await provider.search('The Doors', { type: 'vinyl', country: 'US' });
+    await provider.search('The Doors', { type: 'vinyl', master_id: '555', country: 'US' });
+    assert.equal(new URL(requested[0]!).searchParams.get('country'), null);
+    assert.equal(new URL(requested[1]!).searchParams.get('country'), 'US');
+  } finally { globalThis.fetch = previous; }
 });

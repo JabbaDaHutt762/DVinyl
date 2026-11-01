@@ -260,6 +260,19 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             actualCountry = '';
           }
           if (candidates.length > 0) {
+            // Cache the short pressing list in this user's session. The
+            // configuration redirect and each edition change reuse it instead
+            // of repeating the same Discogs requests and hitting rate limits.
+            if (req.session) req.session.albumPressingOptions = {
+              masterIds: selectedMasterIds.join(','),
+              country: actualCountry,
+              expires: Date.now() + 5 * 60 * 1000,
+              rows: candidates.map((entry: any) => ({
+                id: entry.id, year: entry.year, country: entry.country,
+                variant_info: entry.variant_info, label: entry.label,
+                catno: entry.catno
+              }))
+            };
             const releaseId = String(candidates[0].id);
             const params = new URLSearchParams({
               type: type || 'vinyl',
@@ -413,19 +426,37 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
               .filter(id => /^[1-9][0-9]{0,11}$/.test(id))])).slice(0, 12)
           : [];
         if (masterId) {
-          const fetchPressings = async (requestedCountry: string) => {
-            const responses = await Promise.all(masterIds.map(id => source.search('', {
-              master_id: id, type: searchTypeHint || 'vinyl',
-              browse_mode: 'pressings', country: requestedCountry
-            })));
-            return responses.flat();
-          };
-          let matched = await fetchPressings(pressingCountry);
-          if (!matched.length && pressingCountry) {
-            matched = await fetchPressings('');
-            pressingCountry = '';
+          const cached = req.session?.albumPressingOptions;
+          const validCache = cached && cached.masterIds === masterIds.join(',')
+            && cached.country === pressingCountry && cached.expires > Date.now()
+            && Array.isArray(cached.rows);
+          if (validCache) {
+            availablePressings = pressingOptions(cached.rows);
+          } else {
+            const fetchPressings = async (requestedCountry: string) => {
+              const responses = await Promise.all(masterIds.map(id => source.search('', {
+                master_id: id, type: searchTypeHint || 'vinyl',
+                browse_mode: 'pressings', country: requestedCountry
+              })));
+              return responses.flat();
+            };
+            let matched = await fetchPressings(pressingCountry);
+            if (!matched.length && pressingCountry) {
+              matched = await fetchPressings('');
+              pressingCountry = '';
+            }
+            availablePressings = pressingOptions(matched);
+            if (req.session) req.session.albumPressingOptions = {
+              masterIds: masterIds.join(','),
+              country: pressingCountry,
+              expires: Date.now() + 5 * 60 * 1000,
+              rows: matched.map((entry: any) => ({
+                id: entry.id, year: entry.year, country: entry.country,
+                variant_info: entry.variant_info, label: entry.label,
+                catno: entry.catno
+              }))
+            };
           }
-          availablePressings = pressingOptions(matched);
           // Direct-release URLs must remain selectable even when outside the
           // first Discogs page of a big master.
           if (!availablePressings.some(p => p.id === String(externalId))) {

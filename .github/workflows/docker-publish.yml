@@ -1,126 +1,50 @@
-name: Docker Image CI
+name: Fork CI and GHCR publish
 
 on:
-  release:
-    types: [published]
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag de release optionnel (ex: 3.2.1)'
-        required: false
-        type: string
 
-env:
-  GHCR_IMAGE: ghcr.io/kyonew/dvinyl
-  DH_IMAGE: kyonew/dvinyl
+permissions:
+  contents: read
 
 jobs:
-  build:
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log into GHCR
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Sign in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v5
+      - name: Build and publish fork image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          secrets: |
-            screenscraper_dev_id=${{ secrets.SCREENSCRAPER_DEV_ID }}
-            screenscraper_dev_password=${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
-
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    runs-on: ubuntu-latest
-    needs: [build]
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: digests-*
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.GHCR_IMAGE }}
+          push: true
           tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' || github.ref == 'refs/heads/main' }}
-            type=ref,event=branch
-
-      - name: Log into GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create GHCR manifest and push
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.GHCR_IMAGE }}@sha256:%s ' *)
-
-      - name: Log into Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Copy to Docker Hub
-        run: |
-          GHCR_TAGS=$(jq -cr '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          for tag in $GHCR_TAGS; do
-            DH_TAG=$(echo "$tag" | sed "s|${{ env.GHCR_IMAGE }}|${{ env.DH_IMAGE }}|")
-            docker buildx imagetools create -t "$DH_TAG" "$tag"
-          done
+            ghcr.io/jabbadahutt762/dvinyl:latest
+            ghcr.io/jabbadahutt762/dvinyl:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,8 +1,8 @@
 # DVinyl fork — Unraid deployment
 
 Fork: https://github.com/JabbaDaHutt762/DVinyl
-Image: `ghcr.io/jabbadahutt762/dvinyl:3.3.0-clemons.3` (pinned) or `:latest`
-Starting point: upstream DVinyl 3.3.0; current fork release: 3.3.0-clemons.3. See [CHANGELOG.md](../CHANGELOG.md).
+Image: `ghcr.io/jabbadahutt762/dvinyl:3.3.0-clemons.4` (pinned) or `:latest`
+Starting point: upstream DVinyl 3.3.0; current fork release: 3.3.0-clemons.4. See [CHANGELOG.md](../CHANGELOG.md).
 
 ## First customization
 
@@ -48,6 +48,6 @@ goal is eliminating repeated pressings from the first album search page.
 
 ## Using versioned releases
 
-The running app reports the version from `package.json`. Pin `ghcr.io/jabbadahutt762/dvinyl:3.3.0-clemons.3` for repeatable installs, or use `:latest` to follow every passing main-branch build. Release-specific images are not overwritten after the corresponding GitHub release exists. Each public fork update should increment the `-clemons.N` version and document changes in `CHANGELOG.md`.
+The running app reports the version from `package.json`. Pin `ghcr.io/jabbadahutt762/dvinyl:3.3.0-clemons.4` for repeatable installs, or use `:latest` to follow every passing main-branch build. Release-specific images are not overwritten after the corresponding GitHub release exists. Each public fork update should increment the `-clemons.N` version and document changes in `CHANGELOG.md`.
 
 To contribute the search features to another DVinyl install, use this fork image directly or cherry-pick the commits linked in `CHANGELOG.md`. They are related changes across routes, templates, and music metadata helpers; avoid copying just one template.

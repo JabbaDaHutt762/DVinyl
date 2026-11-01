@@ -111,17 +111,18 @@
                     <i class="fa-solid fa-pen-to-square text-primary-theme"></i> <%= t('confirm_' + plugin.i18nKey + '.config_title', { defaultValue: t('confirm_vinyl.config_title') }) %>
                 </h1>
 
-                <% if (plugin.id === 'music' && locals.pressingMasterId) { %>
+                <% if (plugin.id === 'music' && (locals.pressingMasterId || locals.studioAlbumPreview)) { %>
                     <div class="mb-6 p-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
                         <label for="pressing-choice" class="block text-sm font-bold mb-2">Color / Edition / Pressing</label>
                         <select id="pressing-choice" class="w-full p-3 rounded-lg bg-white dark:bg-gray-900 border border-black/10 dark:border-white/20"
                             data-confirm-url="<%= baseUrl %>/confirm-music/"
-                            data-master-id="<%= pressingMasterId %>"
-                            data-master-ids="<%= pressingMasterIds || pressingMasterId %>"
-                            data-country="<%= pressingCountry %>"
+                            data-api-url="<%= locals.studioAlbumPreview ? baseUrl + '/api/music/album-pressings/' + studioAlbumId + '?artist=' + encodeURIComponent(studioAlbumArtist) + '&album=' + encodeURIComponent(studioAlbumTitle) + '&country=' + encodeURIComponent(studioAlbumCountry) + '&type=' + encodeURIComponent(item.media_type || 'vinyl') + (studioAlbumId.startsWith('master-') ? '&master_ids=' + encodeURIComponent(String(locals.studioAlbumMasterIds || '')) : '') : '' %>"
+                            data-master-id="<%= locals.pressingMasterId || '' %>"
+                            data-master-ids="<%= locals.pressingMasterIds || '' %>"
+                            data-country="<%= locals.pressingCountry || locals.studioAlbumCountry || 'US' %>"
                             data-format="<%= item.media_type || 'vinyl' %>"
                             aria-describedby="pressing-choice-help" required>
-                            <option value="" <%= locals.pressingSelectionPending ? 'selected' : '' %>>Select the pressing you own...</option>
+                            <option value="" <%= locals.pressingSelectionPending ? 'selected' : '' %>><%= locals.studioAlbumPreview ? 'Loading available pressings...' : 'Select the pressing you own...' %></option>
                             <% (locals.availablePressings || []).forEach(pressing => { %>
                                 <option value="<%= pressing.id %>" <%= !locals.pressingSelectionPending && String(item.discogs_id) === pressing.id ? 'selected' : '' %>>
                                     <%= pressing.label %>
@@ -129,18 +130,25 @@
                             <% }) %>
                         </select>
                         <p id="pressing-choice-help" class="mt-2 text-xs opacity-65">
-                            <%= locals.pressingCountry ? 'Showing ' + pressingCountry + ' pressings.' : 'Showing worldwide pressings (no US matches found or country filter cleared).' %>
+                            <% if (locals.studioAlbumPreview) { %>Your album is ready to configure. Pressing choices load here separately.<% } else { %>
+                                <%= locals.pressingCountry ? 'Showing ' + pressingCountry + ' pressings.' : 'Showing worldwide pressings (no US matches found or country filter cleared).' %>
+                            <% } %>
                             Choosing a pressing loads its artwork, edition, catalog number and barcode when Discogs has one.
                         </p>
                         <% if (locals.pressingSelectionPending) { %>
-                            <p class="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">Choose your pressing before saving to Collection or Wishlist. The information below is a preview.</p>
+                            <p class="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">Choose your pressing before saving to Collection or Wishlist. The album details below are ready to edit.</p>
                         <% } %>
                     </div>
+                    <button type="button" id="retry-pressings" class="hidden mt-3 text-sm font-bold text-primary-theme underline">Retry pressing lookup</button>
+                    <p id="pressing-lookup-message" role="status" class="mt-2 text-sm opacity-75"></p>
                     <script>
                         (() => {
                             const selection = document.getElementById('pressing-choice');
-                            selection?.addEventListener('change', () => {
-                                if (!selection.value) return;
+                            const message = document.getElementById('pressing-lookup-message');
+                            const retry = document.getElementById('retry-pressings');
+                            if (!selection) return;
+                            selection.addEventListener('change', () => {
+                                if (!selection.value || !selection.dataset.masterId) return;
                                 const url = new URL(selection.dataset.confirmUrl + encodeURIComponent(selection.value), window.location.origin);
                                 url.searchParams.set('source', 'discogs');
                                 url.searchParams.set('master_id', selection.dataset.masterId);
@@ -149,6 +157,37 @@
                                 url.searchParams.set('country', selection.dataset.country);
                                 window.location.assign(url.toString());
                             });
+                            if (!selection.dataset.apiUrl) return;
+                            const fetchPressings = async () => {
+                                retry.classList.add('hidden');
+                                selection.disabled = true;
+                                selection.replaceChildren(new Option('Loading available pressings...', ''));
+                                message.textContent = '';
+                                try {
+                                    const response = await fetch(selection.dataset.apiUrl, {
+                                        credentials: 'same-origin',
+                                        headers: { 'Accept': 'application/json' }
+                                    });
+                                    const data = await response.json();
+                                    if (!response.ok) throw new Error(data.error || 'Could not load pressings');
+                                    selection.dataset.masterId = data.master_id || '';
+                                    selection.dataset.masterIds = data.master_ids || '';
+                                    selection.dataset.country = data.country || '';
+                                    selection.replaceChildren(new Option('Select the pressing you own...', ''));
+                                    for (const pressing of (data.pressings || [])) {
+                                        selection.add(new Option(pressing.label, pressing.id));
+                                    }
+                                    selection.disabled = !(data.pressings || []).length;
+                                    message.textContent = data.notice || (data.pressings || []).length + ' pressing(s) available';
+                                    if (!selection.disabled) selection.focus({ preventScroll: true });
+                                } catch (error) {
+                                    selection.replaceChildren(new Option('Pressings unavailable — retry below', ''));
+                                    message.textContent = error.message || 'Temporarily unable to load pressings';
+                                    retry.classList.remove('hidden');
+                                }
+                            };
+                            retry.addEventListener('click', fetchPressings);
+                            fetchPressings();
                         })();
                     </script>
                 <% } %>

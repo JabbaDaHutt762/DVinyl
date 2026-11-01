@@ -154,5 +154,5 @@ export async function discogsMastersForStudioAlbum(
   const data = await discogsLookup(new URLSearchParams({
     artist, release_title: album, type: 'release', per_page: '100'
   }));
-  return matchingMasters(data.results || [], artist, album).slice(0, 8);
+  return matchingMasters(data.results || [], artist, album, true).slice(0, 8);
 }

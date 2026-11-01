@@ -20,6 +20,7 @@ import { hasSearch, searchableSources, resolveSource, canRefresh, refreshPatchFo
 import { resolveBarcodeWithAi } from '../ai/barcode';
 import { pressingOptions } from '../../plugins/music/pressingOptions';
 import { studioAlbumsForArtist, discogsMastersForStudioAlbum } from '../../plugins/music/studioCatalog';
+import { musicSearchPreferences } from '../../plugins/music/searchPreferences';
 import { identifyFromPhoto } from '../ai/photo';
 import { IdentificationGuess } from '../ai/identify';
 import { isAcceptedImage } from '../ai/images';
@@ -119,6 +120,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         // instead of resetting it to the default United States.
         if (typeof value === 'string' && (value.trim() || name === 'country')) searchFields[name] = value.trim();
       }
+      if (plugin.id === 'music') Object.assign(searchFields, musicSearchPreferences(req.body, searchFields));
       res.locals.searchFields = searchFields;
       // Which database to ask. The form only offers the picker when the plugin has more
       // than one configured, so most searches arrive without it and take the default.
@@ -224,6 +226,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         if (selectedMasterId) {
           res.locals.selectedMaster = {
             id: selectedMasterId,
+            master_ids: selectedMasterIds.join(','),
             title: typeof req.body.master_title === 'string' ? req.body.master_title.slice(0, 160) : ''
           };
         }

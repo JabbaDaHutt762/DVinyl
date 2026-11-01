@@ -3,6 +3,19 @@
 This is a community-maintained fork of [Kyonew/DVinyl](https://github.com/Kyonew/DVinyl).
 Version numbers use the `-clemons.N` suffix to distinguish our work from official releases.
 
+## 3.3.0-clemons.2 — November 1, 2026
+
+**Album-grouping filter persistence fix.**
+
+- Restores stable search defaults: Core Studio Albums, Artist Only, Non-live, Hide Compilations, Hide Singles/EPs, and US pressing preference.
+- Preserves chosen catalog and artist modes when an album is selected, pressing filters change, or the user goes Back to Albums.
+- Preserves multiple Discogs master IDs when refining a grouped album's pressings.
+- Distinguishes intentionally unchecked exclusion controls from missing fields on form submissions.
+- Makes Live Only / All Recordings switch to the broader Discogs catalog instead of silently ignoring the request.
+- Adds regression tests covering default filters, grouped masters, studio classification, and round-trip navigation.
+
+No database migration required.
+
 ## 3.3.0-clemons.1 — November 1, 2026
 
 **Initial tracked fork release** (previous experimental images were only tagged `latest`).

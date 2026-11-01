@@ -134,6 +134,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       let scannedBarcode = isBarcodeQuery(postedBarcode) ? postedBarcode.replace(/[- ]/g, '') : '';
       // Scanner input and follow-up searches must never inherit album filters.
       const unfilteredScan = isMusicBarcodeScan(plugin.id, rawQuery, scannedBarcode);
+      if (unfilteredScan) res.locals.searchFields = unfilteredMusicLookup(type || 'vinyl');
       // Set only when this request resolved a barcode: the fallback below rewrites a
       // seller's product name, never what the user typed themselves.
       let resolvedTitle = '';
@@ -547,7 +548,17 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         details.source = source.id;
         // A studio preview is not a physical Discogs release. Never persist
         // a MusicBrainz UUID (or master ID) as a Discogs pressing identifier.
-        details.source_id = studioPreview ? '' : String(externalId);
+        const editionUnselected = studioPreview || (plugin.id === 'music' && req.query.choose_pressing === '1');
+        details.source_id = editionUnselected ? '' : String(externalId);
+        if (editionUnselected) {
+          // No fake physical-release identity when the customer chooses to
+          // save the album without picking a specific pressing.
+          delete details.discogs_id;
+          if (!studioPreview) {
+            details.variant_color = '';
+            details.catalog_number = '';
+          }
+        }
         res.locals.studioAlbumPreview = studioPreview;
         res.locals.studioAlbumId = studioPreview ? String(externalId) : '';
         res.locals.studioAlbumArtist = studioPreview ? rawArtist : '';
@@ -624,13 +635,15 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         res.locals.pressingMasterIds = masterIds.join(',');
         res.locals.pressingCountry = pressingCountry;
         res.locals.pressingSelectionPending = studioPreview || (!!masterId && req.query.choose_pressing === '1');
+        res.locals.scannedBarcode = isBarcodeQuery(String(req.query.barcode || ''))
+          ? String(req.query.barcode).replace(/[- ]/g, '') : '';
         // The first release supplies a preview while an edition is not yet
         // selected. Do not suggest its barcode belongs to the user's record.
         if (res.locals.pressingSelectionPending) details.barcode = '';
 
         // Barcode scanned on the add page, carried over via query string
-        if (req.query.barcode) {
-          details.barcode = String(req.query.barcode);
+        if (res.locals.scannedBarcode) {
+          details.barcode = res.locals.scannedBarcode;
         }
 
         const suggestions = await buildFieldSuggestions(plugin, activeCollectionId, details);

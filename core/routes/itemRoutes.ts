@@ -511,6 +511,10 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         res.locals.studioAlbumId = studioPreview ? String(externalId) : '';
         res.locals.studioAlbumArtist = studioPreview ? rawArtist : '';
         res.locals.studioAlbumTitle = studioPreview ? rawAlbum : '';
+        res.locals.studioAlbumMasterIds = studioPreview
+          ? String(req.query.master_ids || '').split(',')
+              .filter((id: string) => /^[1-9][0-9]{0,11}$/.test(id)).slice(0, 12).join(',')
+          : '';
         res.locals.studioAlbumCountry = typeof req.query.country === 'string' ? req.query.country : 'US';
         const activeCollectionId = res.locals.activeCollectionId;
 

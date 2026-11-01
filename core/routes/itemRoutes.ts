@@ -19,6 +19,7 @@ import { applyVisibilityFilter, applyShareScopeFilter, applyPluginKindFilter, is
 import { hasSearch, searchableSources, resolveSource, canRefresh, refreshPatchFor } from '../sources';
 import { resolveBarcodeWithAi } from '../ai/barcode';
 import { pressingOptions } from '../../plugins/music/pressingOptions';
+import { studioAlbumsForArtist, discogsMastersForStudioAlbum } from '../../plugins/music/studioCatalog';
 import { identifyFromPhoto } from '../ai/photo';
 import { IdentificationGuess } from '../ai/identify';
 import { isAcceptedImage } from '../ai/images';
@@ -197,12 +198,29 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
 
         // The album-first Discogs flow submits the selected master back through
         // this same search endpoint, so Wishlist and Add Record behave identically.
-        const selectedMasterId = plugin.id === 'music' && typeof req.body.master_id === 'string'
+        const studioSelection = plugin.id === 'music' && source.id === 'discogs'
+          && typeof req.body.studio_album_id === 'string'
+          && /^[0-9a-f-]{36}$/i.test(req.body.studio_album_id)
+          && typeof req.body.studio_artist === 'string' && req.body.studio_artist.length < 140
+          && typeof req.body.studio_title === 'string' && req.body.studio_title.length < 180;
+        let selectedMasterId = plugin.id === 'music' && typeof req.body.master_id === 'string'
           && /^[1-9][0-9]{0,11}$/.test(req.body.master_id) ? req.body.master_id : undefined;
-        const selectedMasterIds = selectedMasterId
+        let selectedMasterIds = selectedMasterId
           ? Array.from(new Set([selectedMasterId, ...String(req.body.master_ids || '').split(',')
               .filter((id: string) => /^[1-9][0-9]{0,11}$/.test(id))])).slice(0, 12)
           : [];
+        if (studioSelection) {
+          const masterIds = await discogsMastersForStudioAlbum(req.body.studio_artist, req.body.studio_title);
+          selectedMasterId = masterIds[0];
+          selectedMasterIds = masterIds;
+          if (!selectedMasterId) {
+            return res.render('add', {
+              results: [], error: 'No matching Discogs master pressing could be found for ' + req.body.studio_title + '. Try All Discogs albums or Search exact pressings.',
+              searchQuery: rawQuery, searchType: type || 'vinyl', user: res.locals.user,
+              currentType: 'add-music', sources, activeSource: source.id, plugin
+            });
+          }
+        }
         if (selectedMasterId) {
           res.locals.selectedMaster = {
             id: selectedMasterId,
@@ -221,6 +239,14 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
             language: req.language,
             pluginSettings: settings?.pluginSettings?.[plugin.id] || {}
           };
+          // Artist discography first: only official, primary-type Album entries
+          // without Live, Compilation and other secondary classifications.
+          if (!selectedMasterId && plugin.id === 'music' && source.id === 'discogs'
+              && options.browse_mode !== 'pressings' && options.catalog_scope !== 'all'
+              && !/discogs\.com\//i.test(q) && !/^\d{12,13}$/.test(q)) {
+            const studio = await studioAlbumsForArtist(q);
+            if (studio !== null) return studio;
+          }
           if (!selectedMasterId || source.id !== 'discogs') return source.search(q, options);
           const sets = await Promise.all(selectedMasterIds.map(id =>
             source.search(q, { ...options, master_id: id })));

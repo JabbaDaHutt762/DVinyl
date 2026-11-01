@@ -134,9 +134,11 @@
                     <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
                     <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
                     <input type="hidden" name="browse_mode" value="albums">
+                    <input type="hidden" name="catalog_scope" value="<%= (locals.searchFields || {}).catalog_scope || 'studio' %>">
+                    <input type="hidden" name="artist_scope" value="<%= (locals.searchFields || {}).artist_scope || 'artist' %>">
                     <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
-                    <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
-                    <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
+                    <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations ?? '1' %>">
+                    <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles ?? '1' %>">
                     <input type="hidden" name="country" value="<%= Object.prototype.hasOwnProperty.call(locals.searchFields || {}, 'country') ? searchFields.country : 'US' %>">
                     <input type="hidden" name="source" value="<%= locals.activeSource || 'discogs' %>">
                     <button type="submit" class="text-sm font-bold text-primary-theme hover:underline">Back to albums</button>
@@ -146,7 +148,13 @@
                 <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
                 <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
                 <input type="hidden" name="browse_mode" value="pressings">
+                <input type="hidden" name="catalog_scope" value="<%= (locals.searchFields || {}).catalog_scope || 'studio' %>">
+                <input type="hidden" name="artist_scope" value="<%= (locals.searchFields || {}).artist_scope || 'artist' %>">
+                <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
+                <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations ?? '1' %>">
+                <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles ?? '1' %>">
                 <input type="hidden" name="master_id" value="<%= selectedMaster.id %>">
+                <input type="hidden" name="master_ids" value="<%= selectedMaster.master_ids || selectedMaster.id %>">
                 <input type="hidden" name="master_title" value="<%= selectedMaster.title %>">
                 <input type="hidden" name="source" value="<%= locals.activeSource || 'discogs' %>">
                 <label class="text-xs font-bold">Year
@@ -202,10 +210,12 @@
                             <input type="hidden" name="type" value="<%= locals.searchType || 'vinyl' %>">
                             <input type="hidden" name="source" value="<%= item.source %>">
                             <input type="hidden" name="browse_mode" value="pressings">
+                            <input type="hidden" name="catalog_scope" value="<%= (locals.searchFields || {}).catalog_scope || 'studio' %>">
+                            <input type="hidden" name="artist_scope" value="<%= (locals.searchFields || {}).artist_scope || 'artist' %>">
                             <input type="hidden" name="country" value="<%= Object.prototype.hasOwnProperty.call(locals.searchFields || {}, 'country') ? searchFields.country : 'US' %>">
                             <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
-                            <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
-                            <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
+                            <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations ?? '1' %>">
+                            <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles ?? '1' %>">
                             <% if (item.is_studio_album) { %>
                                 <input type="hidden" name="studio_album_id" value="<%= item.id %>">
                                 <input type="hidden" name="studio_artist" value="<%= item.artist %>">

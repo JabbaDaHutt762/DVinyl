@@ -117,6 +117,7 @@
                         <select id="pressing-choice" class="w-full p-3 rounded-lg bg-white dark:bg-gray-900 border border-black/10 dark:border-white/20"
                             data-confirm-url="<%= baseUrl %>/confirm-music/"
                             data-master-id="<%= pressingMasterId %>"
+                            data-master-ids="<%= pressingMasterIds || pressingMasterId %>"
                             data-country="<%= pressingCountry %>"
                             data-format="<%= item.media_type || 'vinyl' %>"
                             aria-describedby="pressing-choice-help" required>
@@ -143,6 +144,7 @@
                                 const url = new URL(selection.dataset.confirmUrl + encodeURIComponent(selection.value), window.location.origin);
                                 url.searchParams.set('source', 'discogs');
                                 url.searchParams.set('master_id', selection.dataset.masterId);
+                                url.searchParams.set('master_ids', selection.dataset.masterIds);
                                 url.searchParams.set('type', selection.dataset.format);
                                 url.searchParams.set('country', selection.dataset.country);
                                 window.location.assign(url.toString());

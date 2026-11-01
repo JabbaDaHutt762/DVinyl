@@ -207,6 +207,7 @@
                             <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
                             <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
                             <input type="hidden" name="master_id" value="<%= item.id %>">
+                            <input type="hidden" name="master_ids" value="<%= (item.master_ids || [item.id]).join(',') %>">
                             <input type="hidden" name="master_title" value="<%= item.title %>">
                             <button type="submit" class="w-full h-full flex flex-col text-left">
                     <% } else { %>

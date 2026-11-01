@@ -3,6 +3,17 @@
 This is a community-maintained fork of [Kyonew/DVinyl](https://github.com/Kyonew/DVinyl).
 Version numbers use the `-clemons.N` suffix to distinguish our work from official releases.
 
+## 3.3.0-clemons.3 — November 1, 2026
+
+**Direct album editor navigation fix.**
+
+- Clicking an album now opens Configure Album directly rather than submitting a second POST search that could fail.
+- Album details appear immediately from the selected catalog record. The pressing selector requests editions asynchronously within the editor.
+- If Discogs is temporarily unavailable, a retry control is shown inside Configure Album without returning to Search.
+- Both MusicBrainz studio albums and grouped Discogs master albums use the direct route.
+- A selected pressing still loads its actual Discogs details (including barcode) before saving; preview items cannot be saved as a physical release.
+- Added navigation and editor template regression tests. No database migration.
+
 ## 3.3.0-clemons.2 — November 1, 2026
 
 **Album-grouping filter persistence fix.**

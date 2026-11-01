@@ -50,9 +50,11 @@
         const extraFormats = ['Shellac', 'Flexi-disc', 'Lathe Cut', 'Acetate', '8-Track Cartridge', '4-Track Cartridge', 'Reel-To-Reel', 'Microcassette', 'Minidisc', 'DAT', 'DCC', 'SACD', 'CDr'];
         const picked = locals.searchFields || {};
         const formatFilter = picked.format_filter || '';
-        const anyFilter = ['year', 'genre_filter', 'label_filter', 'format_filter', 'hide_compilations', 'hide_singles'].some(k => picked[k])
+        const anyFilter = ['year', 'genre_filter', 'label_filter', 'format_filter'].some(k => picked[k])
             || (Object.prototype.hasOwnProperty.call(picked, 'country') && picked.country !== 'US');
     %>
+    <!-- The marker lets the server distinguish unchecked boxes from missing fields. -->
+    <input type="hidden" name="music_filters_present" value="1">
     <!-- Album-first mode is shared by the Wishlist and Add Record flows. -->
     <fieldset class="mt-4 flex justify-center gap-2" aria-label="Discogs search mode">
         <% const browseMode = picked.browse_mode === 'pressings' ? 'pressings' : 'albums'; %>
@@ -100,9 +102,28 @@
         <% }) %>
     </fieldset>
     <div class="mt-3 flex flex-wrap justify-center gap-5 text-xs">
-        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="hide_compilations" value="1" <%= picked.hide_compilations === '1' ? 'checked' : '' %>> Hide compilations</label>
-        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="hide_singles" value="1" <%= picked.hide_singles === '1' ? 'checked' : '' %>> Hide singles and EPs</label>
+        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="hide_compilations" value="1" <%= picked.hide_compilations !== '0' ? 'checked' : '' %>> Hide compilations</label>
+        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="hide_singles" value="1" <%= picked.hide_singles !== '0' ? 'checked' : '' %>> Hide singles and EPs</label>
     </div>
+    <script>
+        // Keep the catalog selection and live-recording selection coherent.
+        // The studio-only catalog cannot contain live albums by definition.
+        (() => {
+            const form = document.currentScript.closest('form');
+            if (!form) return;
+            const studio = form.querySelector('input[name="catalog_scope"][value="studio"]');
+            const broad = form.querySelector('input[name="catalog_scope"][value="all"]');
+            const nonLive = form.querySelector('input[name="live_filter"][value="non_live"]');
+            for (const option of form.querySelectorAll('input[name="live_filter"]')) {
+                option.addEventListener('change', () => {
+                    if (option.checked && option.value !== 'non_live' && broad) broad.checked = true;
+                });
+            }
+            studio?.addEventListener('change', () => {
+                if (studio.checked && nonLive) nonLive.checked = true;
+            });
+        })();
+    </script>
     <!-- Advanced Filters -->
     <div class="mt-4 flex justify-center">
         <button type="button" onclick="document.getElementById('advanced-filters').classList.toggle('hidden'); document.getElementById('filter-icon').classList.toggle('fa-chevron-up'); document.getElementById('filter-icon').classList.toggle('fa-chevron-down')" class="text-xs opacity-50 hover:opacity-100 flex items-center gap-2 transition-opacity font-bold uppercase tracking-wider">

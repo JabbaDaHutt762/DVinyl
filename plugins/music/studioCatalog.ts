@@ -1,6 +1,7 @@
 import { fetchJson } from '../../core/helpers';
 import type { SearchResult } from '../../core/types';
 import { artistKey } from './discogsBrowse';
+import { albumKey, masterLinks, matchingMasters, transientApiError } from './studioMatching';
 
 const MB = 'https://musicbrainz.org/ws/2';
 const AGENT = 'DVinyl-Catalog/1.0 (https://github.com/JabbaDaHutt762/DVinyl)';
@@ -54,10 +55,18 @@ async function mbJson(path: string): Promise<any> {
   try {
     const delay = Math.max(0, nextRequestAt - Date.now());
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    nextRequestAt = Date.now() + 1200;
-    return await fetchJson(MB + path, { headers: {
-      'User-Agent': AGENT, 'Accept': 'application/json'
-    } });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      nextRequestAt = Date.now() + 1200;
+      try {
+        return await fetchJson(MB + path, { headers: {
+          'User-Agent': AGENT, 'Accept': 'application/json'
+        }, signal: AbortSignal.timeout(15000) });
+      } catch (error: any) {
+        if (!transientApiError(error) || attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, Math.min(error.retryAfterMs || 1500 * (attempt + 1), 7000)));
+      }
+    }
+    throw new Error('MusicBrainz retries exhausted');
   } finally { finished(); }
 }
 

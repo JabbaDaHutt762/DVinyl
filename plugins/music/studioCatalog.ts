@@ -2,6 +2,7 @@ import { fetchJson } from '../../core/helpers';
 import type { SearchResult } from '../../core/types';
 import { artistKey } from './discogsBrowse';
 import { albumKey, masterLinks, matchingMasters, transientApiError } from './studioMatching';
+import { albumCoverFallbacks } from './albumCovers';
 
 const MB = 'https://musicbrainz.org/ws/2';
 const AGENT = 'DVinyl-Catalog/1.0 (https://github.com/JabbaDaHutt762/DVinyl)';
@@ -16,6 +17,7 @@ export interface StudioAlbum extends SearchResult {
   artist: string;
   year: string;
   cover_image: string;
+  cover_image_fallback?: string;
   is_studio_album: boolean;
   is_master: false;
 }
@@ -94,6 +96,8 @@ export async function studioAlbumsForArtist(query: string): Promise<StudioAlbum[
     if (offset+100 >= (payload['release-group-count'] || 0)) break;
   }
   const results = officialStudioGroups(groups, String(exact.name));
+  const backups = await albumCoverFallbacks(String(exact.name));
+  for (const album of results) album.cover_image_fallback = backups.get(albumKey(album.title));
   catalogCache.set(cacheKey, { expires: Date.now() + 30 * 60 * 1000, results });
   if (catalogCache.size > 250) catalogCache.clear();
   return results;

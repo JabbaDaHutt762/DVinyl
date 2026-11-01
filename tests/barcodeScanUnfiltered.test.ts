@@ -14,7 +14,8 @@ test('music scan removes every browsing filter without changing normal defaults'
   assert.equal(opts.hide_compilations,'0');
   assert.equal(opts.hide_singles,'0');
   assert.equal(isMusicBarcodeScan('music','012345678905',''),true);
-  assert.equal(isMusicBarcodeScan('music','The Beatles','012345678905'),true);
+  // A barcode cached from the previous search must NEVER change new text searches.
+  assert.equal(isMusicBarcodeScan('music','The Beatles','012345678905'),false);
   assert.equal(isMusicBarcodeScan('music','The Beatles',''),false);
   assert.equal(isMusicBarcodeScan('book','012345678905',''),false);
 });

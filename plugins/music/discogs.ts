@@ -1,5 +1,5 @@
 import { SearchProvider, SearchOptions, SearchResult, ConfirmData } from '../../core/types';
-import { fetchJson } from '../../core/helpers';
+import { discogsFetch } from './discogsFetch';
 import { validDiscogsMasterId, prioritizeMatchingMasters, exactArtistMasters, groupAlbumMasters } from './discogsBrowse';
 import { filterDiscogsMasters } from './discogsFilters';
 import { STANDARD_FORMAT_TERMS } from './constants';
@@ -75,7 +75,7 @@ export class DiscogsProvider implements SearchProvider {
     }
 
     const responses = await Promise.all(
-      searchUrls.map(url => fetchJson(url, { headers }))
+      searchUrls.map(url => discogsFetch(url))
     );
 
     let allResults: any[] = [];
@@ -113,7 +113,7 @@ export class DiscogsProvider implements SearchProvider {
         if (year) extra += `&year=${encodeURIComponent(year)}`;
         if (genre_filter) extra += `&genre=${encodeURIComponent(genre_filter)}`;
         if (label_filter) extra += `&label=${encodeURIComponent(label_filter)}`;
-        const broad = await fetchJson(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100${extra}&token=${token}`, { headers });
+        const broad = await discogsFetch(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100${extra}&token=${token}`);
         allResults = broad.results || [];
       }
     }
@@ -180,7 +180,7 @@ export class DiscogsProvider implements SearchProvider {
     const token = process.env.DISCOGS_TOKEN;
     const searchTypeHint = options.type;
     const url = `https://api.discogs.com/releases/${id}?token=${token}`;
-    const data = await fetchJson(url, { headers: { 'User-Agent': 'DVinylApp/1.0' } });
+    const data = await discogsFetch(url);
 
     let formatType: string[] = [];
     let variantColor: string[] = [];

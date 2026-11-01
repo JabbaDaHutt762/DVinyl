@@ -99,25 +99,56 @@ export async function studioAlbumsForArtist(query: string): Promise<StudioAlbum[
   return results;
 }
 
-/** Resolve a selected canonical studio album to its Discogs master releases. */
-export async function discogsMastersForStudioAlbum(artist: string, album: string): Promise<string[]> {
+/** Look up a selected studio album without relying on exact punctuation. */
+export async function discogsMastersForStudioAlbum(
+  artist: string, album: string, releaseGroupId?: string
+): Promise<string[]> {
   const token = process.env.DISCOGS_TOKEN;
   if (!token) throw new Error('Discogs token is missing');
-  const params = new URLSearchParams({
-    artist, release_title: album, type: 'master', per_page: '100'
-  });
-  const payload = await fetchJson('https://api.discogs.com/database/search?' + params.toString(), {
-    headers: { 'User-Agent': 'DVinylApp/1.0', 'Authorization': 'Discogs token=' + token }
-  });
-  const albumKey = (value: string) => value.toLowerCase().normalize('NFKC').replace(/\u00d7/g, 'x').replace(/[^a-z0-9]/g,'');
-  const expected = albumKey(album);
-  return (payload.results || []).filter((item: any) => {
-    const full = String(item.title || '');
-    const split = full.indexOf(' - ');
-    if (split < 0) return false;
-    const name = full.slice(0,split);
-    const title = full.slice(split+3);
-    return artistKey(name) === artistKey(artist) && albumKey(title) === expected;
-  }).map((item: any) => String(item.id))
-    .filter((id: string) => /^[1-9]\d{0,11}$/.test(id)).slice(0,8);
+
+  // Prefer the MusicBrainz relationship: this also handles variants such as
+  // The Rolling Stones "12 × 5" vs Discogs "12 X 5".
+  if (releaseGroupId && /^[0-9a-f-]{36}$/i.test(releaseGroupId)) {
+    try {
+      const group = await mbJson('/release-group/' + encodeURIComponent(releaseGroupId) + '?inc=url-rels&fmt=json');
+      const linked = masterLinks(group.relations || []);
+      if (linked.length) return linked.slice(0, 8);
+    } catch (error: any) {
+      console.warn('[studio-lookup] MB relationship unavailable:', error.message);
+    }
+  }
+
+  const discogsLookup = async (params: URLSearchParams): Promise<any> => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await fetchJson('https://api.discogs.com/database/search?' + params, {
+          headers: { 'User-Agent': AGENT, Authorization: 'Discogs token=' + token },
+          signal: AbortSignal.timeout(15000)
+        });
+      } catch (error: any) {
+        if (!transientApiError(error) || attempt === 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, Math.min(error.retryAfterMs || 2000, 7000)));
+      }
+    }
+    return { results: [] };
+  };
+
+  // First search masters using Discogs' structured title fields. Try the
+  // punctuation variant when the database doesn't return the canonical name.
+  const spellings = [...new Set([album, album.replace(/\u00d7/g, 'X')])];
+  for (const title of spellings) {
+    const params = new URLSearchParams({
+      artist, release_title: title, type: 'master', per_page: '100'
+    });
+    const data = await discogsLookup(params);
+    const matches = matchingMasters(data.results || [], artist, album);
+    if (matches.length) return matches.slice(0, 8);
+  }
+
+  // As a final fallback, search physical releases and follow their master_id.
+  // Discogs does not always index older album masters under the title spelling.
+  const data = await discogsLookup(new URLSearchParams({
+    artist, release_title: album, type: 'release', per_page: '100'
+  }));
+  return matchingMasters(data.results || [], artist, album).slice(0, 8);
 }

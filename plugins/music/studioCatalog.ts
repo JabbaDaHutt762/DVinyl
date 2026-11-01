@@ -3,6 +3,7 @@ import type { SearchResult } from '../../core/types';
 import { artistKey } from './discogsBrowse';
 import { albumKey, masterLinks, matchingMasters, transientApiError } from './studioMatching';
 import { albumCoverFallbacks } from './albumCovers';
+import { discogsFetch } from './discogsFetch';
 
 const MB = 'https://musicbrainz.org/ws/2';
 const AGENT = 'DVinyl-Catalog/1.0 (https://github.com/JabbaDaHutt762/DVinyl)';
@@ -122,20 +123,8 @@ export async function discogsMastersForStudioAlbum(
     }
   }
 
-  const discogsLookup = async (params: URLSearchParams): Promise<any> => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await fetchJson('https://api.discogs.com/database/search?' + params, {
-          headers: { 'User-Agent': AGENT, Authorization: 'Discogs token=' + token },
-          signal: AbortSignal.timeout(15000)
-        });
-      } catch (error: any) {
-        if (!transientApiError(error) || attempt === 1) throw error;
-        await new Promise(resolve => setTimeout(resolve, Math.min(error.retryAfterMs || 2000, 7000)));
-      }
-    }
-    return { results: [] };
-  };
+  const discogsLookup = (params: URLSearchParams) =>
+    discogsFetch('https://api.discogs.com/database/search?' + params.toString());
 
   // First search masters using Discogs' structured title fields. Try the
   // punctuation variant when the database doesn't return the canonical name.

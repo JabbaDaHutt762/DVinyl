@@ -192,8 +192,20 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           });
         }
 
+        // The album-first Discogs flow submits the selected master back through
+        // this same search endpoint, so Wishlist and Add Record behave identically.
+        const selectedMasterId = plugin.id === 'music' && typeof req.body.master_id === 'string'
+          && /^[1-9][0-9]{0,11}$/.test(req.body.master_id) ? req.body.master_id : undefined;
+        if (selectedMasterId) {
+          res.locals.selectedMaster = {
+            id: selectedMasterId,
+            title: typeof req.body.master_title === 'string' ? req.body.master_title.slice(0, 160) : ''
+          };
+        }
+
         const runSearch = (q: string) => source.search(q, {
           ...searchFields,
+          master_id: selectedMasterId,
           type: type || plugin.id,
           year,
           country,

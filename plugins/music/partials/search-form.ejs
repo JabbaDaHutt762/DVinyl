@@ -52,6 +52,19 @@
         const formatFilter = picked.format_filter || '';
         const anyFilter = ['year', 'country', 'genre_filter', 'label_filter', 'format_filter'].some(k => picked[k]);
     %>
+    <!-- Album-first mode is shared by the Wishlist and Add Record flows. -->
+    <fieldset class="mt-4 flex justify-center gap-2" aria-label="Discogs search mode">
+        <% const browseMode = picked.browse_mode === 'pressings' ? 'pressings' : 'albums'; %>
+        <label class="cursor-pointer">
+            <input type="radio" name="browse_mode" value="albums" class="peer sr-only" <%= browseMode === 'albums' ? 'checked' : '' %>>
+            <span class="inline-block px-4 py-2 rounded-lg text-xs font-bold bg-black/5 dark:bg-white/5 peer-checked:bg-primary-theme peer-checked:text-white">Browse albums</span>
+        </label>
+        <label class="cursor-pointer">
+            <input type="radio" name="browse_mode" value="pressings" class="peer sr-only" <%= browseMode === 'pressings' ? 'checked' : '' %>>
+            <span class="inline-block px-4 py-2 rounded-lg text-xs font-bold bg-black/5 dark:bg-white/5 peer-checked:bg-primary-theme peer-checked:text-white">Search exact pressings</span>
+        </label>
+    </fieldset>
+
     <!-- Advanced Filters -->
     <div class="mt-4 flex justify-center">
         <button type="button" onclick="document.getElementById('advanced-filters').classList.toggle('hidden'); document.getElementById('filter-icon').classList.toggle('fa-chevron-up'); document.getElementById('filter-icon').classList.toggle('fa-chevron-down')" class="text-xs opacity-50 hover:opacity-100 flex items-center gap-2 transition-opacity font-bold uppercase tracking-wider">

@@ -210,7 +210,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
               .filter((id: string) => /^[1-9][0-9]{0,11}$/.test(id))])).slice(0, 12)
           : [];
         if (studioSelection) {
-          const masterIds = await discogsMastersForStudioAlbum(req.body.studio_artist, req.body.studio_title);
+          const masterIds = await discogsMastersForStudioAlbum(req.body.studio_artist, req.body.studio_title, req.body.studio_album_id);
           selectedMasterId = masterIds[0];
           selectedMasterIds = masterIds;
           if (!selectedMasterId) {

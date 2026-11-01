@@ -221,7 +221,9 @@
                     <% } %>
                         <div class="relative <%= aspect %> bg-black/5 dark:bg-white/5">
                             <% if (item.cover_image && !item.cover_image.includes('spacer.gif')) { %>
-                                <img src="<%= item.cover_image %>" loading="lazy" onerror="this.onerror=null; this.src='<%= baseUrl %>/ressources/logo.png';" class="w-full h-full object-cover">
+                                <img src="<%= item.cover_image %>" data-cover-fallback="<%= item.cover_image_fallback || '' %>" loading="lazy"
+                                    onerror="if(this.dataset.coverFallback){this.src=this.dataset.coverFallback;this.dataset.coverFallback=''}else{this.onerror=null;this.src='<%= baseUrl %>/ressources/logo.png'}"
+                                    class="w-full h-full object-cover">
                             <% } else { %>
                                 <div class="w-full h-full flex items-center justify-center opacity-30">
                                     <i class="fa-solid fa-<%= plugin.icon %> text-3xl"></i>

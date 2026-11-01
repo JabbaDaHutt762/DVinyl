@@ -1,6 +1,9 @@
 import { fetchJson } from '../../core/helpers';
 import type { SearchResult } from '../../core/types';
 import { artistKey } from './discogsBrowse';
+import { albumKey, masterLinks, matchingMasters, transientApiError } from './studioMatching';
+import { albumCoverFallbacks } from './albumCovers';
+import { discogsFetch } from './discogsFetch';
 
 const MB = 'https://musicbrainz.org/ws/2';
 const AGENT = 'DVinyl-Catalog/1.0 (https://github.com/JabbaDaHutt762/DVinyl)';
@@ -15,6 +18,7 @@ export interface StudioAlbum extends SearchResult {
   artist: string;
   year: string;
   cover_image: string;
+  cover_image_fallback?: string;
   is_studio_album: boolean;
   is_master: false;
 }
@@ -54,10 +58,18 @@ async function mbJson(path: string): Promise<any> {
   try {
     const delay = Math.max(0, nextRequestAt - Date.now());
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    nextRequestAt = Date.now() + 1200;
-    return await fetchJson(MB + path, { headers: {
-      'User-Agent': AGENT, 'Accept': 'application/json'
-    } });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      nextRequestAt = Date.now() + 1200;
+      try {
+        return await fetchJson(MB + path, { headers: {
+          'User-Agent': AGENT, 'Accept': 'application/json'
+        }, signal: AbortSignal.timeout(15000) });
+      } catch (error: any) {
+        if (!transientApiError(error) || attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, Math.min(error.retryAfterMs || 1500 * (attempt + 1), 7000)));
+      }
+    }
+    throw new Error('MusicBrainz retries exhausted');
   } finally { finished(); }
 }
 
@@ -85,30 +97,51 @@ export async function studioAlbumsForArtist(query: string): Promise<StudioAlbum[
     if (offset+100 >= (payload['release-group-count'] || 0)) break;
   }
   const results = officialStudioGroups(groups, String(exact.name));
+  const backups = await albumCoverFallbacks(String(exact.name));
+  for (const album of results) album.cover_image_fallback = backups.get(albumKey(album.title));
   catalogCache.set(cacheKey, { expires: Date.now() + 30 * 60 * 1000, results });
   if (catalogCache.size > 250) catalogCache.clear();
   return results;
 }
 
-/** Resolve a selected canonical studio album to its Discogs master releases. */
-export async function discogsMastersForStudioAlbum(artist: string, album: string): Promise<string[]> {
+/** Look up a selected studio album without relying on exact punctuation. */
+export async function discogsMastersForStudioAlbum(
+  artist: string, album: string, releaseGroupId?: string
+): Promise<string[]> {
   const token = process.env.DISCOGS_TOKEN;
   if (!token) throw new Error('Discogs token is missing');
-  const params = new URLSearchParams({
-    artist, release_title: album, type: 'master', per_page: '100'
-  });
-  const payload = await fetchJson('https://api.discogs.com/database/search?' + params.toString(), {
-    headers: { 'User-Agent': 'DVinylApp/1.0', 'Authorization': 'Discogs token=' + token }
-  });
-  const albumKey = (value: string) => value.toLowerCase().normalize('NFKC').replace(/[^a-z0-9]/g,'');
-  const expected = albumKey(album);
-  return (payload.results || []).filter((item: any) => {
-    const full = String(item.title || '');
-    const split = full.indexOf(' - ');
-    if (split < 0) return false;
-    const name = full.slice(0,split);
-    const title = full.slice(split+3);
-    return artistKey(name) === artistKey(artist) && albumKey(title) === expected;
-  }).map((item: any) => String(item.id))
-    .filter((id: string) => /^[1-9]\d{0,11}$/.test(id)).slice(0,8);
+
+  // Prefer the MusicBrainz relationship: this also handles variants such as
+  // The Rolling Stones "12 × 5" vs Discogs "12 X 5".
+  if (releaseGroupId && /^[0-9a-f-]{36}$/i.test(releaseGroupId)) {
+    try {
+      const group = await mbJson('/release-group/' + encodeURIComponent(releaseGroupId) + '?inc=url-rels&fmt=json');
+      const linked = masterLinks(group.relations || []);
+      if (linked.length) return linked.slice(0, 8);
+    } catch (error: any) {
+      console.warn('[studio-lookup] MB relationship unavailable:', error.message);
+    }
+  }
+
+  const discogsLookup = (params: URLSearchParams) =>
+    discogsFetch('https://api.discogs.com/database/search?' + params.toString());
+
+  // First search masters using Discogs' structured title fields. Try the
+  // punctuation variant when the database doesn't return the canonical name.
+  const spellings = [...new Set([album, album.replace(/\u00d7/g, 'X')])];
+  for (const title of spellings) {
+    const params = new URLSearchParams({
+      artist, release_title: title, type: 'master', per_page: '100'
+    });
+    const data = await discogsLookup(params);
+    const matches = matchingMasters(data.results || [], artist, album);
+    if (matches.length) return matches.slice(0, 8);
+  }
+
+  // As a final fallback, search physical releases and follow their master_id.
+  // Discogs does not always index older album masters under the title spelling.
+  const data = await discogsLookup(new URLSearchParams({
+    artist, release_title: album, type: 'release', per_page: '100'
+  }));
+  return matchingMasters(data.results || [], artist, album, true).slice(0, 8);
 }

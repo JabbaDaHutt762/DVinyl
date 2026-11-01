@@ -150,7 +150,10 @@ export class DiscogsProvider implements SearchProvider {
         cover_image: item.cover_image || item.thumb || '/ressources/logo.png',
         variant_info: variant_info,
         is_advanced_cd: item.is_advanced_cd,
-        country: item.country || ''
+        country: item.country || '',
+        label: item.label || '',
+        catno: item.catno || '',
+        format: item.format || []
       };
     });
   }

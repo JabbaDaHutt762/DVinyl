@@ -417,6 +417,9 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         res.locals.pressingMasterId = masterId;
         res.locals.pressingCountry = pressingCountry;
         res.locals.pressingSelectionPending = !!masterId && req.query.choose_pressing === '1';
+        // The first release supplies a preview while an edition is not yet
+        // selected. Do not suggest its barcode belongs to the user's record.
+        if (res.locals.pressingSelectionPending) details.barcode = '';
 
         // Barcode scanned on the add page, carried over via query string
         if (req.query.barcode) {

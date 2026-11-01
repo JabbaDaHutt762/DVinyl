@@ -25,7 +25,10 @@ export class DiscogsProvider implements SearchProvider {
     let isDirectRelease = false;
     const masterId = validDiscogsMasterId(options.master_id);
     const scanUnfiltered = (options as any).barcode_lookup === true;
-    const browseAlbums = !scanUnfiltered && options.browse_mode !== 'pressings' && !masterId;
+    const scannedCode = /^[0-9]{12,13}$/.test(query.replace(/[- ]/g, ''));
+    // An exact barcode locates physical releases; a fallback title locates
+    // albums without inventing an edition the barcode never identified.
+    const browseAlbums = !masterId && (scanUnfiltered ? !scannedCode : options.browse_mode !== 'pressings');
     const strictArtist = browseAlbums && options.artist_scope !== 'all';
 
     const urlMatch = query.match(/discogs\.com\/(?:[a-zA-Z]{2}\/)?(release|master)\/(\d+)/);
@@ -60,9 +63,9 @@ export class DiscogsProvider implements SearchProvider {
       if (label_filter) advancedParams += `&label=${encodeURIComponent(label_filter)}`;
 
       if (scanUnfiltered) {
-        // Barcode-derived titles are uncertain; search all release types and
-        // editions instead of applying even the Vinyl/CD format filter.
-        searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&per_page=100&token=${token}`);
+        // The barcode did not identify a precise pressing. Browse unfiltered
+        // master albums instead, so the selected album can be saved unlinked.
+        searchUrls.push(`https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&per_page=100&token=${token}`);
       } else if (browseAlbums) {
         // One search tile per Discogs master instead of one per pressing.
         searchUrls.push(`https://api.discogs.com/database/search?${strictArtist ? 'artist' : 'q'}=${encodeURIComponent(query)}&type=master&per_page=100${advancedParams}&token=${token}`);

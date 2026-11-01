@@ -206,7 +206,7 @@
                     <% const albumMaster = plugin.id === 'music' && item.source === 'discogs' && (item.is_master || item.is_studio_album); %>
                     <% if (albumMaster) { %>
                         <%# Album click is navigation to the editor, never another POST to search-music. %>
-                        <a href="<%= baseUrl %>/confirm-music/<%= item.is_studio_album ? 'studio-' : 'master-' %><%= item.id %>?artist=<%= encodeURIComponent(item.artist || item.creator || '') %>&album=<%= encodeURIComponent(item.title || '') %>&year=<%= encodeURIComponent(item.year || '') %>&country=<%= encodeURIComponent((locals.searchFields || {}).country ?? 'US') %>&type=<%= encodeURIComponent(locals.searchType || 'vinyl') %>&cover=<%= encodeURIComponent(item.cover_image_fallback || item.cover_image || '') %><%= item.is_studio_album ? '' : '&master_ids=' + encodeURIComponent((item.master_ids || [item.id]).join(',')) %>"
+                        <a href="<%= baseUrl %>/confirm-music/<%= item.is_studio_album ? 'studio-' : 'master-' %><%= item.id %>?artist=<%= encodeURIComponent(item.artist || item.creator || '') %>&album=<%= encodeURIComponent(item.title || '') %>&year=<%= encodeURIComponent(item.year || '') %>&country=<%= encodeURIComponent((locals.searchFields || {}).country ?? 'US') %>&type=<%= encodeURIComponent(locals.searchType || 'vinyl') %>&barcode=<%= encodeURIComponent(locals.scanned_barcode || '') %>&cover=<%= encodeURIComponent(item.cover_image_fallback || item.cover_image || '') %><%= item.is_studio_album ? '' : '&master_ids=' + encodeURIComponent((item.master_ids || [item.id]).join(',')) %>"
                             class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
                     <% } else { %>
                         <a href="<%= baseUrl %><%= item.confirmPath %>" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
@@ -433,6 +433,8 @@
             onCode(code) {
                 resetScanButton(scanTranslations.found);
                 searchInput.value = code;
+                // The server detects barcode scans by code or scanned_barcode,
+                // bypassing every artist/album filter for this submission.
                 form.requestSubmit();
             },
             // The overlay's own close button: the camera is already stopped.

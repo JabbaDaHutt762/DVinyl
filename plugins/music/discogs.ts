@@ -1,6 +1,7 @@
 import { SearchProvider, SearchOptions, SearchResult, ConfirmData } from '../../core/types';
 import { fetchJson } from '../../core/helpers';
 import { validDiscogsMasterId, prioritizeMatchingMasters } from './discogsBrowse';
+import { filterDiscogsMasters } from './discogsFilters';
 import { STANDARD_FORMAT_TERMS } from './constants';
 
 export class DiscogsProvider implements SearchProvider {
@@ -48,7 +49,8 @@ export class DiscogsProvider implements SearchProvider {
     } else {
       let advancedParams = '';
       if (year) advancedParams += `&year=${encodeURIComponent(year)}`;
-      if (country) advancedParams += `&country=${encodeURIComponent(country)}`;
+      // A country applies to physical pressings, not the master album catalog.
+      if (country && !browseAlbums) advancedParams += `&country=${encodeURIComponent(country)}`;
       if (genre_filter) advancedParams += `&genre=${encodeURIComponent(genre_filter)}`;
       if (label_filter) advancedParams += `&label=${encodeURIComponent(label_filter)}`;
 
@@ -114,7 +116,12 @@ export class DiscogsProvider implements SearchProvider {
       }
     }
 
-    const ordered = browseAlbums && !urlMatch ? prioritizeMatchingMasters(deduplicatedResults, query) : deduplicatedResults;
+    // Genre/format metadata from Discogs is incomplete; never filter out an
+    // unknown classification except when explicitly showing Live only.
+    const filtered = browseAlbums && !urlMatch
+      ? filterDiscogsMasters(deduplicatedResults, options)
+      : deduplicatedResults;
+    const ordered = browseAlbums && !urlMatch ? prioritizeMatchingMasters(filtered, query) : filtered;
     return ordered.slice(0, 100).map(item => {
       let variant_info = '';
 

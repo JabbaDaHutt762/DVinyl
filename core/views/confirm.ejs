@@ -19,7 +19,7 @@
             <i class="fa-solid fa-arrow-left mr-2"></i> <%= t('common.back_to_search') %>
         </a>
         <% } %>
-        <button type="submit" form="confirm-form" name="in_wishlist" value="false"
+        <button type="submit" form="confirm-form" name="in_wishlist" value="false" <%= locals.pressingSelectionPending ? 'disabled title="Choose a pressing before saving"' : '' %>
             class="flex-shrink-0 text-white bg-primary-theme hover:brightness-110 font-bold rounded-lg text-xs px-4 py-2.5 transition-transform hover:scale-[1.02] flex items-center justify-center gap-2 shadow-lg shadow-primary-theme/20">
             <i class="fa-solid fa-check"></i> <%= t('confirm_' + plugin.i18nKey + '.btn_collection', { defaultValue: t('confirm_vinyl.btn_collection') }) %>
         </button>
@@ -110,6 +110,46 @@
                 <h1 class="text-2xl font-bold mb-6 flex items-center gap-2">
                     <i class="fa-solid fa-pen-to-square text-primary-theme"></i> <%= t('confirm_' + plugin.i18nKey + '.config_title', { defaultValue: t('confirm_vinyl.config_title') }) %>
                 </h1>
+
+                <% if (plugin.id === 'music' && locals.pressingMasterId) { %>
+                    <div class="mb-6 p-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
+                        <label for="pressing-choice" class="block text-sm font-bold mb-2">Color / Edition / Pressing</label>
+                        <select id="pressing-choice" class="w-full p-3 rounded-lg bg-white dark:bg-gray-900 border border-black/10 dark:border-white/20"
+                            data-confirm-url="<%= baseUrl %>/confirm-music/"
+                            data-master-id="<%= pressingMasterId %>"
+                            data-country="<%= pressingCountry %>"
+                            data-format="<%= item.media_type || 'vinyl' %>"
+                            aria-describedby="pressing-choice-help" required>
+                            <option value="" <%= locals.pressingSelectionPending ? 'selected' : '' %>>Select the pressing you own...</option>
+                            <% (locals.availablePressings || []).forEach(pressing => { %>
+                                <option value="<%= pressing.id %>" <%= !locals.pressingSelectionPending && String(item.discogs_id) === pressing.id ? 'selected' : '' %>>
+                                    <%= pressing.label %>
+                                </option>
+                            <% }) %>
+                        </select>
+                        <p id="pressing-choice-help" class="mt-2 text-xs opacity-65">
+                            <%= locals.pressingCountry ? 'Showing ' + pressingCountry + ' pressings.' : 'Showing worldwide pressings (no US matches found or country filter cleared).' %>
+                            Choosing a pressing loads its artwork, edition, catalog number and barcode when Discogs has one.
+                        </p>
+                        <% if (locals.pressingSelectionPending) { %>
+                            <p class="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">Choose your pressing before saving to Collection or Wishlist. The information below is a preview.</p>
+                        <% } %>
+                    </div>
+                    <script>
+                        (() => {
+                            const selection = document.getElementById('pressing-choice');
+                            selection?.addEventListener('change', () => {
+                                if (!selection.value) return;
+                                const url = new URL(selection.dataset.confirmUrl + encodeURIComponent(selection.value), window.location.origin);
+                                url.searchParams.set('source', 'discogs');
+                                url.searchParams.set('master_id', selection.dataset.masterId);
+                                url.searchParams.set('type', selection.dataset.format);
+                                url.searchParams.set('country', selection.dataset.country);
+                                window.location.assign(url.toString());
+                            });
+                        })();
+                    </script>
+                <% } %>
 
                 <!-- Duplicate warning banner -->
                 <%- include('partials/duplicate-warning') %>
@@ -209,6 +249,7 @@
                             if (!f.showIn.includes('confirm')) return false;
                             if (f.showCondition === 'manual-only' && !isManual) return false;
                             if (f.showCondition === 'api-only' && isManual) return false;
+                            if (f.name === 'barcode' && locals.pressingSelectionPending) return false;
                             return f.group === 'main' && f.type !== 'custom';
                         });
                         %>
@@ -247,10 +288,10 @@
                     </div>
 
                     <div class="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button type="submit" name="in_wishlist" value="true" class="bg-black/5 dark:bg-white/5 hover:bg-pink-500 hover:text-white font-bold rounded-lg text-sm px-5 py-4 transition-colors flex items-center justify-center gap-2">
+                        <button type="submit" name="in_wishlist" value="true" <%= locals.pressingSelectionPending ? 'disabled title="Choose a pressing first"' : '' %> class="bg-black/5 dark:bg-white/5 hover:bg-pink-500 hover:text-white font-bold rounded-lg text-sm px-5 py-4 transition-colors flex items-center justify-center gap-2">
                             <i class="fa-solid fa-gift"></i> <%= t('confirm_' + plugin.i18nKey + '.btn_wishlist', { defaultValue: t('confirm_vinyl.btn_wishlist') }) %>
                         </button>
-                        <button type="submit" name="in_wishlist" value="false" class="text-white bg-primary-theme hover:brightness-110 font-bold rounded-lg text-lg px-5 py-4 transition-transform hover:scale-[1.01] flex items-center justify-center gap-2 shadow-lg shadow-primary-theme/20">
+                        <button type="submit" name="in_wishlist" value="false" <%= locals.pressingSelectionPending ? 'disabled title="Choose a pressing first"' : '' %> class="text-white bg-primary-theme hover:brightness-110 font-bold rounded-lg text-lg px-5 py-4 transition-transform hover:scale-[1.01] flex items-center justify-center gap-2 shadow-lg shadow-primary-theme/20">
                             <i class="fa-solid fa-check"></i> <%= t('confirm_' + plugin.i18nKey + '.btn_collection', { defaultValue: t('confirm_vinyl.btn_collection') }) %>
                         </button>
                     </div>

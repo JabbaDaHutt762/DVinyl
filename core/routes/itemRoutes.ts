@@ -18,6 +18,7 @@ import { deleteItemsAndContents, moveContentsToWishlist } from '../../utils/item
 import { applyVisibilityFilter, applyShareScopeFilter, applyPluginKindFilter, isWithinShareScope } from '../../utils/visibilityHelper';
 import { hasSearch, searchableSources, resolveSource, canRefresh, refreshPatchFor } from '../sources';
 import { resolveBarcodeWithAi } from '../ai/barcode';
+import { pressingOptions } from '../../plugins/music/pressingOptions';
 import { identifyFromPhoto } from '../ai/photo';
 import { IdentificationGuess } from '../ai/identify';
 import { isAcceptedImage } from '../ai/images';
@@ -231,6 +232,35 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
           results = await runSearch(searchQuery);
         }
 
+        // Album cards should open Configure Album immediately, not a second
+        // grid of individual releases. The first candidate is PREVIEW ONLY:
+        // saving remains locked until a pressing is chosen in the selector.
+        if (selectedMasterId && source.id === 'discogs') {
+          let candidates = results;
+          const preferredCountry = Object.prototype.hasOwnProperty.call(searchFields, 'country')
+            ? searchFields.country : 'US';
+          let actualCountry = preferredCountry;
+          if (!candidates.length && preferredCountry) {
+            candidates = await source.search(searchQuery, {
+              ...searchFields, master_id: selectedMasterId,
+              country: '', type: type || plugin.id
+            });
+            actualCountry = '';
+          }
+          if (candidates.length > 0) {
+            const releaseId = String(candidates[0].id);
+            const params = new URLSearchParams({
+              type: type || 'vinyl',
+              source: 'discogs',
+              master_id: selectedMasterId,
+              country: actualCountry,
+              choose_pressing: '1'
+            });
+            // A POST-redirect-GET avoids resubmission warnings on refresh.
+            return res.redirect(303, `${res.locals.baseUrl || ''}/confirm-music/${releaseId}?${params}`);
+          }
+        }
+
         // What the search box shows on the way back. After a scan the digits are useless
         // there: on a hit it is the query that actually matched, and on a miss the whole
         // product name, which is the thing the user has to correct. An identifier is
@@ -356,6 +386,40 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         if (details.creator !== undefined && details[plugin.creatorField] === undefined) {
           details[plugin.creatorField] = details.creator;
         }
+
+        // On an album-first search, fetch available releases for the inline
+        // edition selector. Switches stay on Configure Album, not search results.
+        const masterId = plugin.id === 'music' && source.id === 'discogs'
+          && typeof req.query.master_id === 'string'
+          && /^[1-9][0-9]{0,11}$/.test(req.query.master_id)
+          ? req.query.master_id : undefined;
+        let availablePressings: ReturnType<typeof pressingOptions> = [];
+        let pressingCountry = typeof req.query.country === 'string' ? req.query.country : 'US';
+        if (masterId) {
+          const common = { master_id: masterId, type: searchTypeHint || 'vinyl', browse_mode: 'pressings' };
+          let matched = await source.search('', { ...common, country: pressingCountry });
+          if (!matched.length && pressingCountry) {
+            matched = await source.search('', { ...common, country: '' });
+            pressingCountry = '';
+          }
+          availablePressings = pressingOptions(matched);
+          // Direct-release URLs must remain selectable even when outside the
+          // first Discogs page of a big master.
+          if (!availablePressings.some(p => p.id === String(externalId))) {
+            availablePressings.unshift({
+              id: String(externalId),
+              label: [details.year, details.country, details.variant_color, details.label, details.catalog_number]
+                .filter(Boolean).join(' · ') + ' · Discogs #' + externalId
+            });
+          }
+        }
+        res.locals.availablePressings = availablePressings;
+        res.locals.pressingMasterId = masterId;
+        res.locals.pressingCountry = pressingCountry;
+        res.locals.pressingSelectionPending = !!masterId && req.query.choose_pressing === '1';
+        // The first release supplies a preview while an edition is not yet
+        // selected. Do not suggest its barcode belongs to the user's record.
+        if (res.locals.pressingSelectionPending) details.barcode = '';
 
         // Barcode scanned on the add page, carried over via query string
         if (req.query.barcode) {

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { validDiscogsMasterId, prioritizeMatchingMasters } from '../plugins/music/discogsBrowse';
 import { DiscogsProvider } from '../plugins/music/discogs';
 import { classifyDiscogsMaster, filterDiscogsMasters } from '../plugins/music/discogsFilters';
+import { pressingOptions } from '../plugins/music/pressingOptions';
 
 test('master IDs must be numeric and bounded', () => {
   assert.equal(validDiscogsMasterId('12345'), '12345');
@@ -100,4 +101,16 @@ test('US country filter applies to pressing query, not album master query', asyn
     assert.equal(new URL(requested[0]!).searchParams.get('country'), null);
     assert.equal(new URL(requested[1]!).searchParams.get('country'), 'US');
   } finally { globalThis.fetch = previous; }
+});
+
+
+test('pressing selector names each edition with country year color label catalog and release ID', () => {
+  const rows = pressingOptions([
+    { id: 100, title: 'The Doors - Morrison Hotel', year: '1970', country: 'US', variant_info: 'Red Vinyl', label: 'Elektra', catno: 'EKS-75007' },
+    { id: 100, title: 'duplicate' },
+    { id: 101, year: '2019', country: 'UK', label: ['Rhino'] }
+  ]);
+  assert.equal(rows.length, 2);
+  assert.match(rows[0]!.label, /1970 · US · Red Vinyl · Elektra · EKS-75007 · Discogs #100/);
+  assert.match(rows[1]!.label, /Rhino/);
 });

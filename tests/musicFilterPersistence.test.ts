@@ -74,8 +74,11 @@ test('both album click and back-to-albums templates preserve catalog and artist 
   const view = readFileSync('core/views/add.ejs','utf8');
   const form = readFileSync('plugins/music/partials/search-form.ejs','utf8');
   assert.match(view, /name="master_ids" value="<%= selectedMaster.master_ids/);
-  assert.ok((view.match(/name="catalog_scope" value=/g) || []).length >= 3);
-  assert.ok((view.match(/name="artist_scope" value=/g) || []).length >= 3);
+  // Back-to-Albums and pressing-refinement forms retain both selections.
+  // Album cards now navigate directly via a GET link, not a third POST form.
+  assert.ok((view.match(/name="catalog_scope" value=/g) || []).length >= 2);
+  assert.ok((view.match(/name="artist_scope" value=/g) || []).length >= 2);
+  assert.match(view, /href="<%= baseUrl %>\/confirm-music\//);
   assert.match(form, /name="music_filters_present"/);
   for (const file of ['core/views/add.ejs', 'plugins/music/partials/search-form.ejs'])
     assert.doesNotThrow(() => ejs.compile(readFileSync(file,'utf8'), {filename:file}));

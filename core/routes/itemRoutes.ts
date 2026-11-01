@@ -408,6 +408,61 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
       }
     });
 
+    // Pressing discovery is independent of the editor's initial page load.
+    // A failed/rate-limited provider call must not send users back to Search.
+    if (plugin.id === 'music') router.get('/api/music/album-pressings/:albumId',
+      requireAuth, requireCollectionRole('editor'), async (req: any, res: any) => {
+        const albumId = String(req.params.albumId || '');
+        const isStudio = /^studio-[0-9a-f-]{36}$/i.test(albumId);
+        const isMaster = /^master-[1-9][0-9]{0,11}$/.test(albumId);
+        if (!isStudio && !isMaster) return res.status(400).json({ error: 'Invalid album ID' });
+        const artist = String(req.query.artist || '').slice(0, 140);
+        const album = String(req.query.album || '').slice(0, 180);
+        const type = ['vinyl', 'cd', 'cassette'].includes(String(req.query.type)) ? String(req.query.type) : 'vinyl';
+        let country = typeof req.query.country === 'string' ? req.query.country.slice(0, 45) : 'US';
+        if (!artist || !album) return res.status(400).json({ error: 'Album and artist required' });
+        const source = resolveSource(plugin, 'discogs', res.locals.settings);
+        if (!source) return res.status(503).json({ error: 'Discogs is unavailable' });
+        try {
+          const rawIds = isStudio
+            ? await discogsMastersForStudioAlbum(artist, album, albumId.slice(7))
+            : [albumId.slice(7), ...String(req.query.master_ids || '').split(',')];
+          const masterIds = Array.from(new Set(rawIds.filter((id: string) =>
+            /^[1-9][0-9]{0,11}$/.test(id)))).slice(0, 12);
+          if (!masterIds.length) return res.json({
+            pressings: [], country, master_id: '', master_ids: '',
+            notice: 'No Discogs pressings found for this album. The album editor remains available.'
+          });
+          const load = async (filterCountry: string) => {
+            const matches = await Promise.all(masterIds.map(master_id => source.search('', {
+              master_id, type, browse_mode: 'pressings', country: filterCountry
+            })));
+            return [...new Map(matches.flat().map(item => [String(item.id), item])).values()];
+          };
+          let releases = await load(country);
+          if (!releases.length && country) {
+            releases = await load('');
+            country = '';
+          }
+          if (req.session) req.session.albumPressingOptions = {
+            masterIds: masterIds.join(','), country,
+            expires: Date.now() + 5 * 60 * 1000,
+            rows: releases.map((item: any) => ({
+              id: item.id, year: item.year, country: item.country,
+              variant_info: item.variant_info, label: item.label, catno: item.catno
+            }))
+          };
+          res.json({
+            pressings: pressingOptions(releases), country,
+            master_id: masterIds[0], master_ids: masterIds.join(','),
+            notice: releases.length ? '' : 'No pressings found for the selected format.'
+          });
+        } catch (err: any) {
+          console.error('[studio-pressings] lookup error:', err.message);
+          res.status(502).json({ error: 'Pressing lookup temporarily unavailable. Retry here without losing the album editor.' });
+        }
+      });
+
     // GET /confirm-{type}/:id -> show details from external API before saving
     router.get(`/confirm-${plugin.id}/:id`, requireAuth, requireCollectionRole('editor'), async (req: any, res: any) => {
       const externalId = req.params.id;
@@ -423,17 +478,44 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         // The query string is forwarded whole rather than key by key: what a provider needs
         // to narrow a result down is its own business (TMDB asks which season), and the core
         // has no reason to learn the vocabulary of each one.
-        const details = await source.getDetails(externalId, {
-          ...req.query,
-          type: searchTypeHint,
-          language: req.language
+        const studioPreview = plugin.id === 'music'
+          && (/^studio-[0-9a-f-]{36}$/i.test(String(externalId))
+            || /^master-[1-9][0-9]{0,11}$/.test(String(externalId)));
+        const rawArtist = String(req.query.artist || '').slice(0, 140);
+        const rawAlbum = String(req.query.album || '').slice(0, 180);
+        if (studioPreview && (!rawArtist || !rawAlbum)) return res.status(400).send('Album and artist required');
+        // This preview needs no external API request. Edition lookup loads via
+        // a separate JSON endpoint after the editor is already visible.
+        const rawCover = String(req.query.cover || '');
+        const albumCover = /^https:\/\/(?:coverartarchive\.org|[a-z0-9-]+\.mzstatic\.com)\//i.test(rawCover)
+          ? rawCover : /^studio-[0-9a-f-]{36}$/i.test(String(externalId))
+            ? 'https://coverartarchive.org/release-group/' + String(externalId).slice(7) + '/front-250'
+            : '';
+        const details = studioPreview ? {
+          title: rawAlbum, artist: rawArtist, creator: rawArtist,
+          year: String(req.query.year || '').slice(0, 12),
+          media_type: searchTypeHint || 'vinyl', cover_image: albumCover,
+          tracklist: [], genres: [], styles: [], barcode: ''
+        } : await source.getDetails(externalId, {
+          ...req.query, type: searchTypeHint, language: req.language
         });
 
         // Where this item is about to come from. Written on the confirm form as a hidden
         // pair so the save handler stores it, which is what lets the item be traced back
         // to the right database later on.
         details.source = source.id;
-        details.source_id = String(externalId);
+        // A studio preview is not a physical Discogs release. Never persist
+        // a MusicBrainz UUID (or master ID) as a Discogs pressing identifier.
+        details.source_id = studioPreview ? '' : String(externalId);
+        res.locals.studioAlbumPreview = studioPreview;
+        res.locals.studioAlbumId = studioPreview ? String(externalId) : '';
+        res.locals.studioAlbumArtist = studioPreview ? rawArtist : '';
+        res.locals.studioAlbumTitle = studioPreview ? rawAlbum : '';
+        res.locals.studioAlbumMasterIds = studioPreview
+          ? String(req.query.master_ids || '').split(',')
+              .filter((id: string) => /^[1-9][0-9]{0,11}$/.test(id)).slice(0, 12).join(',')
+          : '';
+        res.locals.studioAlbumCountry = typeof req.query.country === 'string' ? req.query.country : 'US';
         const activeCollectionId = res.locals.activeCollectionId;
 
         // Providers return the creator under a generic `creator` key; make sure
@@ -500,7 +582,7 @@ export function createItemRoutes(plugin: PluginDefinition): Router {
         res.locals.pressingMasterId = masterId;
         res.locals.pressingMasterIds = masterIds.join(',');
         res.locals.pressingCountry = pressingCountry;
-        res.locals.pressingSelectionPending = !!masterId && req.query.choose_pressing === '1';
+        res.locals.pressingSelectionPending = studioPreview || (!!masterId && req.query.choose_pressing === '1');
         // The first release supplies a preview while an edition is not yet
         // selected. Do not suggest its barcode belongs to the user's record.
         if (res.locals.pressingSelectionPending) details.barcode = '';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validDiscogsMasterId, prioritizeMatchingMasters } from '../plugins/music/discogsBrowse';
+import { validDiscogsMasterId, prioritizeMatchingMasters, exactArtistMasters, groupAlbumMasters } from '../plugins/music/discogsBrowse';
 import { DiscogsProvider } from '../plugins/music/discogs';
 import { classifyDiscogsMaster, filterDiscogsMasters } from '../plugins/music/discogsFilters';
 import { pressingOptions } from '../plugins/music/pressingOptions';
@@ -99,7 +99,7 @@ test('US country filter applies to pressing query, not album master query', asyn
     await provider.search('The Doors', { type: 'vinyl', country: 'US' });
     await provider.search('The Doors', { type: 'vinyl', master_id: '555', country: 'US' });
     assert.equal(new URL(requested[0]!).searchParams.get('country'), null);
-    assert.equal(new URL(requested[1]!).searchParams.get('country'), 'US');
+    assert.equal(new URL(requested[requested.length - 1]!).searchParams.get('country'), 'US');
   } finally { globalThis.fetch = previous; }
 });
 
@@ -113,4 +113,66 @@ test('pressing selector names each edition with country year color label catalog
   assert.equal(rows.length, 2);
   assert.match(rows[0]!.label, /1970 · US · Red Vinyl · Elektra · EKS-75007 · Discogs #100/);
   assert.match(rows[1]!.label, /Rhino/);
+});
+
+
+test('the doors excludes similar band names and tributes', () => {
+  const masterRecords = [
+    { id: 1, title: 'The Doors - Morrison Hotel' },
+    { id: 2, title: '3 Doors Down - Away from the Sun' },
+    { id: 3, title: 'Other Band - A Tribute to The Doors' },
+    { id: 4, title: 'The Doors (2) - Strange Days' }
+  ];
+  assert.deepEqual(exactArtistMasters(masterRecords, 'the doors').map(x => x.id), [1,4]);
+});
+
+test('multiple masters of same record yield one card with all pressing sources', () => {
+  const masters = [
+    { id: 10, title: 'The Doors - The Doors', year: 2017 },
+    { id: 11, title: 'The Doors - The Doors', year: 1967 },
+    { id: 12, title: 'The Doors - Strange Days', year: 1967 }
+  ];
+  const grouped = groupAlbumMasters(masters);
+  assert.equal(grouped.length, 2);
+  assert.deepEqual(grouped[0]?.master_ids, ['10', '11']);
+  assert.equal(grouped[0]?.year, 1967);
+});
+
+test('default Discogs search uses artist-specific query and filters exact artist', async () => {
+  const oldFetch = globalThis.fetch;
+  const requested: URL[] = [];
+  globalThis.fetch = async (input: any) => {
+    requested.push(new URL(String(input)));
+    return new Response(JSON.stringify({ results: [
+      { id: 555, title: 'The Doors - Morrison Hotel' },
+      { id: 556, title: '3 Doors Down - Away from the Sun' },
+      { id: 557, title: 'The Doors - Morrison Hotel' }
+    ] }), { status: 200 });
+  };
+  try {
+    const results = await new DiscogsProvider().search('The Doors', { type: 'vinyl' });
+    assert.equal(requested.length, 1);
+    assert.equal(requested[0]?.searchParams.get('artist'), 'The Doors');
+    assert.equal(requested[0]?.searchParams.get('q'), null);
+    assert.equal(results.length, 1);
+    assert.deepEqual(results[0]?.master_ids, ['555', '557']);
+  } finally { globalThis.fetch = oldFetch; }
+});
+
+test('artist query falls back to album title lookup if no matching artist exists', async () => {
+  const oldFetch = globalThis.fetch;
+  const requested: URL[] = [];
+  globalThis.fetch = async (input: any) => {
+    const url = new URL(String(input));
+    requested.push(url);
+    return new Response(JSON.stringify({ results: url.searchParams.has('q')
+      ? [{ id: 60, title: 'The Doors - Morrison Hotel' }] : [] }), { status: 200 });
+  };
+  try {
+    const results = await new DiscogsProvider().search('Morrison Hotel', { type: 'vinyl' });
+    assert.equal(requested.length, 2);
+    assert.equal(requested[0]?.searchParams.get('artist'), 'Morrison Hotel');
+    assert.equal(requested[1]?.searchParams.get('q'), 'Morrison Hotel');
+    assert.equal(results[0]?.title, 'Morrison Hotel');
+  } finally { globalThis.fetch = oldFetch; }
 });

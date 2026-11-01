@@ -100,7 +100,7 @@ export async function discogsMastersForStudioAlbum(artist: string, album: string
   const payload = await fetchJson('https://api.discogs.com/database/search?' + params.toString(), {
     headers: { 'User-Agent': 'DVinylApp/1.0', 'Authorization': 'Discogs token=' + token }
   });
-  const albumKey = (value: string) => value.toLowerCase().normalize('NFKC').replace(/[^a-z0-9]/g,'');
+  const albumKey = (value: string) => value.toLowerCase().normalize('NFKC').replace(/\u00d7/g, 'x').replace(/[^a-z0-9]/g,'');
   const expected = albumKey(album);
   return (payload.results || []).filter((item: any) => {
     const full = String(item.title || '');

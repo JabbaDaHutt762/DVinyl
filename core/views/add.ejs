@@ -195,7 +195,7 @@
             %>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <% results.forEach(item => { %>
-                    <% const albumMaster = plugin.id === 'music' && item.is_master && item.source === 'discogs'; %>
+                    <% const albumMaster = plugin.id === 'music' && item.source === 'discogs' && (item.is_master || item.is_studio_album); %>
                     <% if (albumMaster) { %>
                         <form method="POST" action="<%= baseUrl %>/search-music" class="card-theme rounded-xl overflow-hidden hover:border-primary-theme transition-all group flex flex-col hover:shadow-lg hover:-translate-y-1">
                             <input type="hidden" name="query" value="<%= locals.searchQuery || '' %>">
@@ -206,8 +206,14 @@
                             <input type="hidden" name="live_filter" value="<%= (locals.searchFields || {}).live_filter || 'non_live' %>">
                             <input type="hidden" name="hide_compilations" value="<%= (locals.searchFields || {}).hide_compilations || '' %>">
                             <input type="hidden" name="hide_singles" value="<%= (locals.searchFields || {}).hide_singles || '' %>">
-                            <input type="hidden" name="master_id" value="<%= item.id %>">
-                            <input type="hidden" name="master_ids" value="<%= (item.master_ids || [item.id]).join(',') %>">
+                            <% if (item.is_studio_album) { %>
+                                <input type="hidden" name="studio_album_id" value="<%= item.id %>">
+                                <input type="hidden" name="studio_artist" value="<%= item.artist %>">
+                                <input type="hidden" name="studio_title" value="<%= item.title %>">
+                            <% } else { %>
+                                <input type="hidden" name="master_id" value="<%= item.id %>">
+                                <input type="hidden" name="master_ids" value="<%= (item.master_ids || [item.id]).join(',') %>">
+                            <% } %>
                             <input type="hidden" name="master_title" value="<%= item.title %>">
                             <button type="submit" class="w-full h-full flex flex-col text-left">
                     <% } else { %>
